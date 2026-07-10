@@ -5,7 +5,14 @@ console.log("Backend:", process.env.DB_HOST);
 require("./config/db");
 const app = express();
 const createTables = require("./database/initDB");
-app.use(cors());
+app.use(cors({
+    origin: [
+        "http://localhost:5173",
+        "https://afbros.vercel.app"
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true
+}));
 app.use(express.json());
 const donationRoutes = require("./routes/donationRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
