@@ -17,9 +17,11 @@ app.use(express.json());
 const donationRoutes = require("./routes/donationRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const expenseRoutes = require("./routes/expenseRoutes");
+const authRoutes = require("./routes/authRoutes");
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/donations", donationRoutes);
 app.use("/api/expenses", expenseRoutes);
+app.use("/api/auth", authRoutes);
 app.get("/", (req, res) => {
     res.send("AFBROS Backend Running...");
 });
