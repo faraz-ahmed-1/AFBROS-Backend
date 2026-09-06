@@ -1,17 +1,62 @@
-const verifyToken = require("../middleware/verifyToken");
-const express = require("express");
-const router = express.Router();
+const express =
+    require("express");
+
+const router =
+    express.Router();
+
+const requireManager =
+    require("../middleware/requireManager");
+
 
 const {
+
     addExpense,
+
     getExpenses,
+
     updateExpense,
+
     deleteExpense
-} = require("../controllers/expenseController");
 
-router.post("/", verifyToken, addExpense);
-router.get("/", verifyToken, getExpenses);
-router.put("/:id", verifyToken, updateExpense);
-router.delete("/:id", verifyToken, deleteExpense);
+} = require(
+    "../controllers/expenseController"
+);
 
-module.exports = router;
+
+// ======================================================
+// PUBLIC READ
+// ======================================================
+
+router.get(
+    "/",
+    getExpenses
+);
+
+
+// ======================================================
+// FINANCE MANAGER ONLY
+// ======================================================
+
+router.post(
+    "/",
+    requireManager,
+    addExpense
+);
+
+
+router.put(
+    "/:id",
+    requireManager,
+    updateExpense
+);
+
+
+router.delete(
+    "/:id",
+    requireManager,
+    deleteExpense
+);
+
+
+module.exports =
+    router;

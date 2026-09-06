@@ -1,118 +1,286 @@
 const db = require("../config/db");
 
-// Add Expense
+
+// ======================================================
+// ADD EXPENSE
+// ======================================================
+
 const addExpense = (req, res) => {
 
-    const { fullName, amount, description, date } = req.body;
+    const {
+        fullName,
+        amount,
+        description,
+        date
+    } = req.body;
+
+    if (
+        !fullName?.trim() ||
+        !amount ||
+        !description?.trim() ||
+        !date
+    ) {
+        return res.status(400).json({
+            message: "Please fill in all expense fields."
+        });
+    }
+
+    const numericAmount =
+        Number(amount);
+
+    if (
+        !Number.isFinite(numericAmount) ||
+        numericAmount <= 0
+    ) {
+        return res.status(400).json({
+            message: "Expense amount must be greater than zero."
+        });
+    }
 
     const sql = `
         INSERT INTO expenses
-        (full_name, amount, description, expense_date)
+        (
+            full_name,
+            amount,
+            description,
+            expense_date
+        )
         VALUES (?, ?, ?, ?)
     `;
 
     db.query(
         sql,
-        [fullName, amount, description, date],
-        (err) => {
+        [
+            fullName.trim(),
+            numericAmount,
+            description.trim(),
+            date
+        ],
+        (err, result) => {
 
             if (err) {
-                return res.status(500).json(err);
+
+                console.error(
+                    "ADD EXPENSE ERROR:",
+                    err
+                );
+
+                return res.status(500).json({
+                    message: "Unable to add expense."
+                });
             }
 
-            res.status(201).json({
-                message: "Expense Added Successfully"
+            return res.status(201).json({
+                success: true,
+                message: "Expense added successfully.",
+                id: result.insertId
             });
-
         }
     );
-
 };
 
-// Get Expenses
+
+// ======================================================
+// GET EXPENSES
+// ======================================================
+
 const getExpenses = (req, res) => {
 
-    const search = req.query.search || "";
+    const search =
+        req.query.search?.trim() || "";
+
+    const searchValue =
+        `%${search}%`;
 
     const sql = `
         SELECT *
         FROM expenses
-        WHERE full_name LIKE ?
+        WHERE
+            full_name LIKE ?
+            OR description LIKE ?
+            OR CAST(amount AS CHAR) LIKE ?
         ORDER BY id ASC
     `;
 
     db.query(
         sql,
-        [`%${search}%`],
+        [
+            searchValue,
+            searchValue,
+            searchValue
+        ],
         (err, result) => {
 
             if (err) {
-                return res.status(500).json(err);
+
+                console.error(
+                    "GET EXPENSES ERROR:",
+                    err
+                );
+
+                return res.status(500).json({
+                    message: "Unable to load expenses."
+                });
             }
 
-            res.json(result);
-
+            return res.status(200).json(result);
         }
     );
-
 };
 
-// Update Expense
+
+// ======================================================
+// UPDATE EXPENSE
+// ======================================================
+
 const updateExpense = (req, res) => {
 
-    const { id } = req.params;
-    const { fullName, amount, description, date } = req.body;
+    const expenseId =
+        Number(req.params.id);
+
+    if (
+        !Number.isInteger(expenseId) ||
+        expenseId <= 0
+    ) {
+        return res.status(400).json({
+            message: "Invalid expense ID."
+        });
+    }
+
+    const {
+        fullName,
+        amount,
+        description,
+        date
+    } = req.body;
+
+    if (
+        !fullName?.trim() ||
+        !amount ||
+        !description?.trim() ||
+        !date
+    ) {
+        return res.status(400).json({
+            message: "Please fill in all expense fields."
+        });
+    }
+
+    const numericAmount =
+        Number(amount);
+
+    if (
+        !Number.isFinite(numericAmount) ||
+        numericAmount <= 0
+    ) {
+        return res.status(400).json({
+            message: "Expense amount must be greater than zero."
+        });
+    }
 
     const sql = `
         UPDATE expenses
         SET
-        full_name=?,
-        amount=?,
-        description=?,
-        expense_date=?
-        WHERE id=?
+            full_name = ?,
+            amount = ?,
+            description = ?,
+            expense_date = ?
+        WHERE id = ?
     `;
 
     db.query(
         sql,
-        [fullName, amount, description, date, id],
-        (err) => {
+        [
+            fullName.trim(),
+            numericAmount,
+            description.trim(),
+            date,
+            expenseId
+        ],
+        (err, result) => {
 
             if (err) {
-                return res.status(500).json(err);
+
+                console.error(
+                    "UPDATE EXPENSE ERROR:",
+                    err
+                );
+
+                return res.status(500).json({
+                    message: "Unable to update expense."
+                });
             }
 
-            res.json({
-                message: "Expense Updated"
-            });
+            if (result.affectedRows === 0) {
 
+                return res.status(404).json({
+                    message: "Expense record not found."
+                });
+            }
+
+            return res.status(200).json({
+                success: true,
+                message: "Expense updated successfully."
+            });
         }
     );
-
 };
 
-// Delete Expense
+
+// ======================================================
+// DELETE EXPENSE
+// ======================================================
+
 const deleteExpense = (req, res) => {
 
-    const { id } = req.params;
+    const expenseId =
+        Number(req.params.id);
+
+    if (
+        !Number.isInteger(expenseId) ||
+        expenseId <= 0
+    ) {
+        return res.status(400).json({
+            message: "Invalid expense ID."
+        });
+    }
+
+    const sql = `
+        DELETE FROM expenses
+        WHERE id = ?
+    `;
 
     db.query(
-        "DELETE FROM expenses WHERE id=?",
-        [id],
-        (err) => {
+        sql,
+        [expenseId],
+        (err, result) => {
 
             if (err) {
-                return res.status(500).json(err);
+
+                console.error(
+                    "DELETE EXPENSE ERROR:",
+                    err
+                );
+
+                return res.status(500).json({
+                    message: "Unable to delete expense."
+                });
             }
 
-            res.json({
-                message: "Expense Deleted"
-            });
+            if (result.affectedRows === 0) {
 
+                return res.status(404).json({
+                    message: "Expense record not found."
+                });
+            }
+
+            return res.status(200).json({
+                success: true,
+                message: "Expense deleted successfully."
+            });
         }
     );
-
 };
+
 
 module.exports = {
     addExpense,

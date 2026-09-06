@@ -1,9 +1,25 @@
-const verifyToken = require("../middleware/verifyToken");
-const express = require("express");
-const router = express.Router();
+const express =
+    require("express");
 
-const { getDashboard } = require("../controllers/dashboardController");
+const router =
+    express.Router();
 
-router.get("/", verifyToken, getDashboard);
 
-module.exports = router;
+const {
+    getDashboard
+} = require(
+    "../controllers/dashboardController"
+);
+
+
+// Dashboard is readable by
+// Manager and Guest.
+
+router.get(
+    "/",
+    getDashboard
+);
+
+
+module.exports =
+    router;

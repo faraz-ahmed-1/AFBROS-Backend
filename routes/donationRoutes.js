@@ -1,17 +1,105 @@
-const verifyToken = require("../middleware/verifyToken");
-const express = require("express");
-const router = express.Router();
+const express =
+    require("express");
+
+const router =
+    express.Router();
+
+const requireManager =
+    require("../middleware/requireManager");
+
 
 const {
+
     addDonation,
+
     getDonations,
+
     updateDonation,
+
+    deleteDonation,
+
+    submitDonationRequest,
+
+    getPendingDonationRequests,
+
+    approveDonationRequest,
+
+    rejectDonationRequest
+
+} = require(
+    "../controllers/donationController"
+);
+
+
+// ======================================================
+// PUBLIC / GUEST
+// ======================================================
+
+// Read approved donations
+router.get(
+    "/",
+    getDonations
+);
+
+
+// Guest submits donation verification
+router.post(
+    "/requests",
+    submitDonationRequest
+);
+
+
+// ======================================================
+// FINANCE MANAGER
+// ======================================================
+
+// Pending donation list
+router.get(
+    "/requests",
+    requireManager,
+    getPendingDonationRequests
+);
+
+
+// Approve
+router.post(
+    "/requests/:id/approve",
+    requireManager,
+    approveDonationRequest
+);
+
+
+// Reject
+router.delete(
+    "/requests/:id/reject",
+    requireManager,
+    rejectDonationRequest
+);
+
+
+// Direct manager donation
+router.post(
+    "/",
+    requireManager,
+    addDonation
+);
+
+
+// Edit donation
+router.put(
+    "/:id",
+    requireManager,
+    updateDonation
+);
+
+
+// Delete donation
+router.delete(
+    "/:id",
+    requireManager,
     deleteDonation
-} = require("../controllers/donationController");
+);
 
-router.post("/", verifyToken, addDonation);
-router.get("/", verifyToken, getDonations);
-router.put("/:id", verifyToken, updateDonation);
-router.delete("/:id", verifyToken, deleteDonation);
 
-module.exports = router;
+module.exports =
+    router;
