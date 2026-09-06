@@ -72,11 +72,6 @@ const initializeTables = () => {
 
             }
 
-
-            console.log(
-                "Pending donations table ready."
-            );
-
         }
     );
 
@@ -100,11 +95,6 @@ connection.connect((err) => {
         return;
 
     }
-
-
-    console.log(
-        "Connected to Aiven MySQL"
-    );
 
 
     // Create any missing tables

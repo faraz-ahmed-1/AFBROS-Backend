@@ -43,8 +43,6 @@ db.query(userTable, async (err) => {
         return;
     }
 
-    console.log("Users table ready");
-
     // Check if admin already exists
     db.query(
         "SELECT * FROM users WHERE username = ?",
