@@ -1,90 +1,72 @@
 require("dotenv").config();
 
-const mysql = require("mysql2");
-
-
-console.log("HOST:", process.env.DB_HOST);
-console.log("PORT:", process.env.DB_PORT);
-console.log("USER:", process.env.DB_USER);
-console.log("DB:", process.env.DB_NAME);
-
-
-const connection = mysql.createConnection({
-
-    host: process.env.DB_HOST,
-
-    port: process.env.DB_PORT,
-
-    user: process.env.DB_USER,
-
-    password: process.env.DB_PASSWORD,
-
-    database: process.env.DB_NAME,
-
-    ssl: {
-        rejectUnauthorized: false
-    }
-
-});
+const mysql =
+    require("mysql2");
 
 
 // ======================================================
-// ENSURE COLUMN EXISTS
+// DATABASE CONNECTION
 // ======================================================
 
-const ensureColumn = (
-    table,
-    column,
-    definition
+const db =
+    mysql.createConnection({
+
+        host:
+            process.env.DB_HOST,
+
+        port:
+            process.env.DB_PORT,
+
+        user:
+            process.env.DB_USER,
+
+        password:
+            process.env.DB_PASSWORD,
+
+        database:
+            process.env.DB_NAME,
+
+        ssl: {
+            rejectUnauthorized:
+                false
+        }
+
+    });
+
+
+// ======================================================
+// QUERY PROMISE
+// ======================================================
+
+const queryAsync = (
+    sql,
+    params = []
 ) => {
 
-    connection.query(
-        `SHOW COLUMNS FROM ${table} LIKE ?`,
-        [column],
-        (err, result) => {
+    return new Promise(
+        (
+            resolve,
+            reject
+        ) => {
 
-            if (err) {
+            db.query(
+                sql,
+                params,
+                (
+                    err,
+                    result
+                ) => {
 
-                console.error(
-                    `Unable to check ${column}:`,
-                    err
-                );
+                    if (err) {
 
-                return;
-            }
-
-
-            if (result.length > 0) {
-
-                console.log(
-                    `${table}.${column} ready.`
-                );
-
-                return;
-            }
-
-
-            connection.query(
-                `
-                    ALTER TABLE ${table}
-                    ADD COLUMN ${column} ${definition}
-                `,
-                (alterErr) => {
-
-                    if (alterErr) {
-
-                        console.error(
-                            `Unable to add ${column}:`,
-                            alterErr
-                        );
+                        reject(err);
 
                         return;
+
                     }
 
 
-                    console.log(
-                        `${table}.${column} created.`
-                    );
+                    resolve(result);
 
                 }
             );
@@ -96,123 +78,363 @@ const ensureColumn = (
 
 
 // ======================================================
-// INITIALIZE TABLES
+// CHECK COLUMN
 // ======================================================
 
-const initializeTables = () => {
+const columnExists =
+    async (
+        tableName,
+        columnName
+    ) => {
 
-    const requestTable = `
-
-        CREATE TABLE IF NOT EXISTS pending_donations (
-
-            id INT AUTO_INCREMENT PRIMARY KEY,
-
-            full_name VARCHAR(255) NOT NULL,
-
-            phone VARCHAR(50) NOT NULL,
-
-            trx_id VARCHAR(120) NOT NULL UNIQUE,
-
-            amount DECIMAL(12, 2) NOT NULL,
-
-            transaction_date DATE NOT NULL,
-
-            transaction_time TIME NOT NULL,
-
-            status ENUM(
-                'pending',
-                'accepted',
-                'rejected'
-            ) NOT NULL DEFAULT 'pending',
-
-            decision_at DATETIME NULL,
-
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-
-        )
-
-    `;
-
-
-    connection.query(
-        requestTable,
-        (err) => {
-
-            if (err) {
-
-                console.error(
-                    "Donation requests table error:",
-                    err
-                );
-
-                return;
-            }
-
-
-            console.log(
-                "Donation requests table ready."
+        const rows =
+            await queryAsync(
+                `
+                    SHOW COLUMNS
+                    FROM \`${tableName}\`
+                    LIKE ?
+                `,
+                [
+                    columnName
+                ]
             );
 
 
-            // Existing table migration
+        return (
+            rows.length >
+            0
+        );
 
-            ensureColumn(
-                "pending_donations",
-                "status",
-                `
-                    ENUM(
+    };
+
+
+// ======================================================
+// ENSURE COLUMN
+// ======================================================
+
+const ensureColumn =
+    async (
+        tableName,
+        columnName,
+        definition
+    ) => {
+
+        const exists =
+            await columnExists(
+                tableName,
+                columnName
+            );
+
+
+        if (exists) {
+
+            return;
+
+        }
+
+
+        await queryAsync(
+            `
+                ALTER TABLE \`${tableName}\`
+                ADD COLUMN \`${columnName}\`
+                ${definition}
+            `
+        );
+
+
+        console.log(
+            `Created ${tableName}.${columnName}`
+        );
+
+    };
+
+
+// ======================================================
+// INITIALIZE TABLES
+// ======================================================
+
+const initializeTables =
+    async () => {
+
+        // ==================================================
+        // DONATION REQUEST HISTORY
+        // ==================================================
+
+        await queryAsync(
+            `
+
+                CREATE TABLE IF NOT EXISTS pending_donations
+                (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+
+                    full_name VARCHAR(255) NOT NULL,
+
+                    phone VARCHAR(50) NOT NULL,
+
+                    email VARCHAR(255) NULL,
+
+                    account_title VARCHAR(255) NULL,
+
+                    trx_id VARCHAR(120) NULL,
+
+                    amount DECIMAL(12, 2) NOT NULL,
+
+                    transaction_date DATE NOT NULL,
+
+                    transaction_time TIME NULL,
+
+                    status ENUM(
                         'pending',
                         'accepted',
                         'rejected'
                     )
                     NOT NULL
-                    DEFAULT 'pending'
-                    AFTER transaction_time
-                `
-            );
+                    DEFAULT 'pending',
+
+                    decision_at DATETIME NULL,
+
+                    created_at TIMESTAMP
+                        DEFAULT CURRENT_TIMESTAMP
+                )
+
+            `
+        );
 
 
-            ensureColumn(
+        // ==================================================
+        // MIGRATE EXISTING REQUEST TABLE
+        // ==================================================
+
+        await ensureColumn(
+            "pending_donations",
+            "email",
+            "VARCHAR(255) NULL AFTER phone"
+        );
+
+
+        await ensureColumn(
+            "pending_donations",
+            "account_title",
+            "VARCHAR(255) NULL AFTER email"
+        );
+
+
+        await ensureColumn(
+            "pending_donations",
+            "status",
+            `
+                ENUM(
+                    'pending',
+                    'accepted',
+                    'rejected'
+                )
+                NOT NULL
+                DEFAULT 'pending'
+            `
+        );
+
+
+        await ensureColumn(
+            "pending_donations",
+            "decision_at",
+            "DATETIME NULL"
+        );
+
+
+        /*
+            Old request form required these.
+            New request form doesn't.
+
+            Keep columns only for compatibility
+            with old request history.
+        */
+
+        if (
+            await columnExists(
                 "pending_donations",
-                "decision_at",
+                "trx_id"
+            )
+        ) {
+
+            await queryAsync(
                 `
-                    DATETIME NULL
-                    AFTER status
+                    ALTER TABLE pending_donations
+
+                    MODIFY COLUMN trx_id
+                        VARCHAR(120)
+                        NULL
                 `
             );
 
         }
-    );
 
-};
+
+        if (
+            await columnExists(
+                "pending_donations",
+                "transaction_time"
+            )
+        ) {
+
+            await queryAsync(
+                `
+                    ALTER TABLE pending_donations
+
+                    MODIFY COLUMN transaction_time
+                        TIME
+                        NULL
+                `
+            );
+
+        }
+
+
+        // ==================================================
+        // DONOR PROFILE
+        //
+        // Email stays OUTSIDE donations table.
+        // ==================================================
+
+        await queryAsync(
+            `
+
+                CREATE TABLE IF NOT EXISTS donor_profiles
+                (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+
+                    full_name VARCHAR(255) NOT NULL,
+
+                    phone VARCHAR(50) NOT NULL,
+
+                    email VARCHAR(255) NOT NULL,
+
+                    created_at TIMESTAMP
+                        DEFAULT CURRENT_TIMESTAMP,
+
+                    updated_at TIMESTAMP
+                        DEFAULT CURRENT_TIMESTAMP
+                        ON UPDATE CURRENT_TIMESTAMP,
+
+                    UNIQUE KEY uq_donor_phone (
+                        phone
+                    ),
+
+                    UNIQUE KEY uq_donor_email (
+                        email
+                    )
+                )
+
+            `
+        );
+
+
+        // ==================================================
+        // DONOR UPDATE OTP
+        // ==================================================
+
+        await queryAsync(
+            `
+
+                CREATE TABLE IF NOT EXISTS donor_update_otps
+                (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+
+                    donor_id INT NOT NULL,
+
+                    new_full_name VARCHAR(255) NULL,
+
+                    new_phone VARCHAR(50) NULL,
+
+                    new_email VARCHAR(255) NULL,
+
+                    otp_hash VARCHAR(64) NOT NULL,
+
+                    attempts INT
+                        NOT NULL
+                        DEFAULT 0,
+
+                    expires_at DATETIME NOT NULL,
+
+                    verified_at DATETIME NULL,
+
+                    created_at TIMESTAMP
+                        DEFAULT CURRENT_TIMESTAMP,
+
+                    CONSTRAINT fk_donor_update_otp
+                        FOREIGN KEY (
+                            donor_id
+                        )
+                        REFERENCES donor_profiles(id)
+                        ON DELETE CASCADE
+                )
+
+            `
+        );
+
+
+        await ensureColumn(
+            "donor_update_otps",
+            "attempts",
+            `
+                INT
+                NOT NULL
+                DEFAULT 0
+                AFTER otp_hash
+            `
+        );
+
+
+        console.log(
+            "AFBROS database tables ready."
+        );
+
+    };
 
 
 // ======================================================
 // CONNECT
 // ======================================================
 
-connection.connect((err) => {
+db.connect(
+    async (
+        err
+    ) => {
 
-    if (err) {
+        if (err) {
 
-        console.error(
-            "Database Connection Failed"
+            console.error(
+                "Database Connection Failed:",
+                err
+            );
+
+            return;
+
+        }
+
+
+        console.log(
+            "Connected to Aiven MySQL"
         );
 
-        console.error(err);
 
-        return;
+        try {
+
+            await initializeTables();
+
+        } catch (
+            initError
+        ) {
+
+            console.error(
+                "DATABASE INITIALIZATION ERROR:",
+                initError
+            );
+
+        }
+
     }
+);
 
 
-    console.log(
-        "Connected to Aiven MySQL"
-    );
-
-
-    initializeTables();
-
-});
-
-
-module.exports = connection;
+module.exports =
+    db;

@@ -5,8 +5,9 @@ const router =
     express.Router();
 
 const requireManager =
-    require("../middleware/requireManager");
-
+    require(
+        "../middleware/requireManager"
+    );
 
 const {
 
@@ -50,7 +51,7 @@ router.post(
 
 
 // ======================================================
-// MANAGER REQUESTS
+// MANAGER REQUEST MANAGEMENT
 // ======================================================
 
 router.get(
@@ -106,4 +107,5 @@ router.delete(
 );
 
 
-module.exports = router;
+module.exports =
+    router;

@@ -1,14 +1,144 @@
-const db = require("../config/db");
+const db =
+    require("../config/db");
 
 
 // ======================================================
 // HELPERS
 // ======================================================
 
-const validAmount = (value) => {
+const queryAsync = (
+    sql,
+    params = []
+) => {
+
+    return new Promise(
+        (
+            resolve,
+            reject
+        ) => {
+
+            db.query(
+                sql,
+                params,
+                (
+                    err,
+                    result
+                ) => {
+
+                    if (err) {
+
+                        reject(err);
+
+                        return;
+
+                    }
+
+
+                    resolve(result);
+
+                }
+            );
+
+        }
+    );
+
+};
+
+
+const beginTransactionAsync =
+    () => {
+
+        return new Promise(
+            (
+                resolve,
+                reject
+            ) => {
+
+                db.beginTransaction(
+                    (
+                        err
+                    ) => {
+
+                        if (err) {
+
+                            reject(err);
+
+                            return;
+
+                        }
+
+
+                        resolve();
+
+                    }
+                );
+
+            }
+        );
+
+    };
+
+
+const commitAsync =
+    () => {
+
+        return new Promise(
+            (
+                resolve,
+                reject
+            ) => {
+
+                db.commit(
+                    (
+                        err
+                    ) => {
+
+                        if (err) {
+
+                            reject(err);
+
+                            return;
+
+                        }
+
+
+                        resolve();
+
+                    }
+                );
+
+            }
+        );
+
+    };
+
+
+const rollbackAsync =
+    () => {
+
+        return new Promise(
+            (
+                resolve
+            ) => {
+
+                db.rollback(
+                    () =>
+                        resolve()
+                );
+
+            }
+        );
+
+    };
+
+
+const validAmount = (
+    value
+) => {
 
     const number =
         Number(value);
+
 
     return (
         Number.isFinite(number) &&
@@ -18,101 +148,144 @@ const validAmount = (value) => {
 };
 
 
-// ======================================================
-// ADD DONATION - MANAGER
-// ======================================================
+const validEmail = (
+    value
+) => {
 
-const addDonation = (req, res) => {
-
-    const {
-        fullName,
-        phone,
-        amount,
-        date
-    } = req.body;
-
-
-    if (
-        !fullName?.trim() ||
-        !phone?.trim() ||
-        !amount ||
-        !date
-    ) {
-
-        return res.status(400).json({
-            message:
-                "Please fill in all donation fields."
-        });
-
-    }
-
-
-    if (!validAmount(amount)) {
-
-        return res.status(400).json({
-            message:
-                "Donation amount must be greater than zero."
-        });
-
-    }
-
-
-    const sql = `
-
-        INSERT INTO donations
-        (
-            full_name,
-            phone,
-            amount,
-            donation_date
-        )
-
-        VALUES (?, ?, ?, ?)
-
-    `;
-
-
-    db.query(
-        sql,
-        [
-            fullName.trim(),
-            phone.trim(),
-            Number(amount),
-            date
-        ],
-        (err, result) => {
-
-            if (err) {
-
-                console.error(
-                    "ADD DONATION ERROR:",
-                    err
-                );
-
-                return res.status(500).json({
-                    message:
-                        "Unable to add donation."
-                });
-
-            }
-
-
-            return res.status(201).json({
-
-                success: true,
-
-                message:
-                    "Donation added successfully.",
-
-                id:
-                    result.insertId
-
-            });
-
-        }
+    return (
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+            .test(
+                String(
+                    value ||
+                    ""
+                ).trim()
+            )
     );
 
 };
+
+
+// ======================================================
+// ADD DONATION
+// FINANCE MANAGER
+// ======================================================
+
+const addDonation =
+    (
+        req,
+        res
+    ) => {
+
+        const {
+
+            fullName,
+            phone,
+            amount,
+            date
+
+        } = req.body;
+
+
+        if (
+            !fullName?.trim() ||
+            !phone?.trim() ||
+            !amount ||
+            !date
+        ) {
+
+            return res
+                .status(400)
+                .json({
+                    message:
+                        "Please fill in all donation fields."
+                });
+
+        }
+
+
+        if (
+            !validAmount(
+                amount
+            )
+        ) {
+
+            return res
+                .status(400)
+                .json({
+                    message:
+                        "Donation amount must be greater than zero."
+                });
+
+        }
+
+
+        db.query(
+            `
+
+                INSERT INTO donations
+                (
+                    full_name,
+                    phone,
+                    amount,
+                    donation_date
+                )
+
+                VALUES (?, ?, ?, ?)
+
+            `,
+            [
+
+                fullName.trim(),
+
+                phone.trim(),
+
+                Number(amount),
+
+                date
+
+            ],
+            (
+                err,
+                result
+            ) => {
+
+                if (err) {
+
+                    console.error(
+                        "ADD DONATION ERROR:",
+                        err
+                    );
+
+
+                    return res
+                        .status(500)
+                        .json({
+                            message:
+                                "Unable to add donation."
+                        });
+
+                }
+
+
+                return res
+                    .status(201)
+                    .json({
+
+                        success:
+                            true,
+
+                        message:
+                            "Donation added successfully.",
+
+                        id:
+                            result.insertId
+
+                    });
+
+            }
+        );
+
+    };
 
 
 // ======================================================
@@ -120,862 +293,1131 @@ const addDonation = (req, res) => {
 // PUBLIC / GUEST
 // ======================================================
 
-const getDonations = (req, res) => {
+const getDonations =
+    (
+        req,
+        res
+    ) => {
 
-    const search =
-        req.query.search?.trim() || "";
-
-    const sort =
-        req.query.sort || "id";
-
-
-    const sortOptions = {
-
-        id:
-            "id ASC",
-
-        amountAsc:
-            "amount ASC",
-
-        amountDesc:
-            "amount DESC",
-
-        dateNewest:
-            "donation_date DESC, id DESC",
-
-        dateOldest:
-            "donation_date ASC, id ASC"
-
-    };
+        const search =
+            req.query.search
+                ?.trim() ||
+            "";
 
 
-    const orderBy =
-        sortOptions[sort] ||
-        sortOptions.id;
+        const sort =
+            req.query.sort ||
+            "id";
 
 
-    const value =
-        `%${search}%`;
+        const sortOptions = {
+
+            id:
+                "id ASC",
+
+            amountAsc:
+                "amount ASC",
+
+            amountDesc:
+                "amount DESC",
+
+            dateNewest:
+                "donation_date DESC, id DESC",
+
+            dateOldest:
+                "donation_date ASC, id ASC"
+
+        };
 
 
-    const sql = `
-
-        SELECT
-            id,
-            full_name,
-            phone,
-            amount,
-            donation_date
-
-        FROM donations
-
-        WHERE
-            full_name LIKE ?
-            OR phone LIKE ?
-            OR CAST(amount AS CHAR) LIKE ?
-
-        ORDER BY ${orderBy}
-
-    `;
+        const orderBy =
+            sortOptions[
+                sort
+            ] ||
+            sortOptions.id;
 
 
-    db.query(
-        sql,
-        [
-            value,
-            value,
-            value
-        ],
-        (err, result) => {
-
-            if (err) {
-
-                console.error(
-                    "GET DONATIONS ERROR:",
-                    err
-                );
-
-                return res.status(500).json({
-                    message:
-                        "Unable to load donations."
-                });
-
-            }
+        const value =
+            `%${search}%`;
 
 
-            return res.status(200).json(
+        db.query(
+            `
+
+                SELECT
+
+                    id,
+                    full_name,
+                    phone,
+                    amount,
+                    donation_date
+
+                FROM donations
+
+                WHERE
+                    full_name LIKE ?
+                    OR phone LIKE ?
+                    OR CAST(
+                        amount AS CHAR
+                    ) LIKE ?
+
+                ORDER BY ${orderBy}
+
+            `,
+            [
+                value,
+                value,
+                value
+            ],
+            (
+                err,
                 result
-            );
+            ) => {
 
-        }
-    );
+                if (err) {
 
-};
+                    console.error(
+                        "GET DONATIONS ERROR:",
+                        err
+                    );
 
 
-// ======================================================
-// UPDATE DONATION
-// ======================================================
-
-const updateDonation = (req, res) => {
-
-    const id =
-        Number(req.params.id);
-
-
-    if (
-        !Number.isInteger(id) ||
-        id <= 0
-    ) {
-
-        return res.status(400).json({
-            message:
-                "Invalid donation ID."
-        });
-
-    }
-
-
-    const {
-        fullName,
-        phone,
-        amount,
-        date
-    } = req.body;
-
-
-    if (
-        !fullName?.trim() ||
-        !phone?.trim() ||
-        !amount ||
-        !date
-    ) {
-
-        return res.status(400).json({
-            message:
-                "Please fill in all donation fields."
-        });
-
-    }
-
-
-    if (!validAmount(amount)) {
-
-        return res.status(400).json({
-            message:
-                "Donation amount must be greater than zero."
-        });
-
-    }
-
-
-    const sql = `
-
-        UPDATE donations
-
-        SET
-            full_name = ?,
-            phone = ?,
-            amount = ?,
-            donation_date = ?
-
-        WHERE id = ?
-
-    `;
-
-
-    db.query(
-        sql,
-        [
-            fullName.trim(),
-            phone.trim(),
-            Number(amount),
-            date,
-            id
-        ],
-        (err, result) => {
-
-            if (err) {
-
-                console.error(
-                    "UPDATE DONATION ERROR:",
-                    err
-                );
-
-                return res.status(500).json({
-                    message:
-                        "Unable to update donation."
-                });
-
-            }
-
-
-            if (
-                result.affectedRows === 0
-            ) {
-
-                return res.status(404).json({
-                    message:
-                        "Donation not found."
-                });
-
-            }
-
-
-            return res.json({
-
-                success: true,
-
-                message:
-                    "Donation updated successfully."
-
-            });
-
-        }
-    );
-
-};
-
-
-// ======================================================
-// DELETE DONATION
-// ======================================================
-
-const deleteDonation = (req, res) => {
-
-    const id =
-        Number(req.params.id);
-
-
-    if (
-        !Number.isInteger(id) ||
-        id <= 0
-    ) {
-
-        return res.status(400).json({
-            message:
-                "Invalid donation ID."
-        });
-
-    }
-
-
-    db.query(
-        `
-            DELETE FROM donations
-            WHERE id = ?
-        `,
-        [id],
-        (err, result) => {
-
-            if (err) {
-
-                console.error(
-                    "DELETE DONATION ERROR:",
-                    err
-                );
-
-                return res.status(500).json({
-                    message:
-                        "Unable to delete donation."
-                });
-
-            }
-
-
-            if (
-                result.affectedRows === 0
-            ) {
-
-                return res.status(404).json({
-                    message:
-                        "Donation not found."
-                });
-
-            }
-
-
-            return res.json({
-
-                success: true,
-
-                message:
-                    "Donation deleted successfully."
-
-            });
-
-        }
-    );
-
-};
-
-
-// ======================================================
-// SUBMIT DONATION REQUEST
-// ======================================================
-
-const submitDonationRequest = (
-    req,
-    res
-) => {
-
-    const {
-        fullName,
-        phone,
-        trxId,
-        amount,
-        transactionDate,
-        transactionTime
-    } = req.body;
-
-
-    if (
-        !fullName?.trim() ||
-        !phone?.trim() ||
-        !trxId?.trim() ||
-        !amount ||
-        !transactionDate ||
-        !transactionTime
-    ) {
-
-        return res.status(400).json({
-            message:
-                "Please complete all transaction details."
-        });
-
-    }
-
-
-    if (!validAmount(amount)) {
-
-        return res.status(400).json({
-            message:
-                "Donation amount must be greater than zero."
-        });
-
-    }
-
-
-    const sql = `
-
-        INSERT INTO pending_donations
-        (
-            full_name,
-            phone,
-            trx_id,
-            amount,
-            transaction_date,
-            transaction_time,
-            status
-        )
-
-        VALUES (?, ?, ?, ?, ?, ?, 'pending')
-
-    `;
-
-
-    db.query(
-        sql,
-        [
-            fullName.trim(),
-            phone.trim(),
-            trxId.trim(),
-            Number(amount),
-            transactionDate,
-            transactionTime
-        ],
-        (err, result) => {
-
-            if (err) {
-
-                console.error(
-                    "SUBMIT REQUEST ERROR:",
-                    err
-                );
-
-
-                if (
-                    err.code ===
-                    "ER_DUP_ENTRY"
-                ) {
-
-                    return res.status(409).json({
-                        message:
-                            "This transaction ID has already been submitted."
-                    });
+                    return res
+                        .status(500)
+                        .json({
+                            message:
+                                "Unable to load donations."
+                        });
 
                 }
 
 
-                return res.status(500).json({
+                return res
+                    .status(200)
+                    .json(
+                        result
+                    );
+
+            }
+        );
+
+    };
+
+
+// ======================================================
+// UPDATE DONATION
+// MANAGER
+// ======================================================
+
+const updateDonation =
+    (
+        req,
+        res
+    ) => {
+
+        const id =
+            Number(
+                req.params.id
+            );
+
+
+        if (
+            !Number.isInteger(id) ||
+            id <= 0
+        ) {
+
+            return res
+                .status(400)
+                .json({
+                    message:
+                        "Invalid donation ID."
+                });
+
+        }
+
+
+        const {
+
+            fullName,
+            phone,
+            amount,
+            date
+
+        } = req.body;
+
+
+        if (
+            !fullName?.trim() ||
+            !phone?.trim() ||
+            !amount ||
+            !date
+        ) {
+
+            return res
+                .status(400)
+                .json({
+                    message:
+                        "Please fill in all donation fields."
+                });
+
+        }
+
+
+        if (
+            !validAmount(
+                amount
+            )
+        ) {
+
+            return res
+                .status(400)
+                .json({
+                    message:
+                        "Donation amount must be greater than zero."
+                });
+
+        }
+
+
+        db.query(
+            `
+
+                UPDATE donations
+
+                SET
+                    full_name = ?,
+                    phone = ?,
+                    amount = ?,
+                    donation_date = ?
+
+                WHERE id = ?
+
+            `,
+            [
+
+                fullName.trim(),
+
+                phone.trim(),
+
+                Number(amount),
+
+                date,
+
+                id
+
+            ],
+            (
+                err,
+                result
+            ) => {
+
+                if (err) {
+
+                    console.error(
+                        "UPDATE DONATION ERROR:",
+                        err
+                    );
+
+
+                    return res
+                        .status(500)
+                        .json({
+                            message:
+                                "Unable to update donation."
+                        });
+
+                }
+
+
+                if (
+                    result.affectedRows ===
+                    0
+                ) {
+
+                    return res
+                        .status(404)
+                        .json({
+                            message:
+                                "Donation not found."
+                        });
+
+                }
+
+
+                return res.json({
+
+                    success:
+                        true,
+
+                    message:
+                        "Donation updated successfully."
+
+                });
+
+            }
+        );
+
+    };
+
+
+// ======================================================
+// DELETE DONATION
+// MANAGER
+// ======================================================
+
+const deleteDonation =
+    (
+        req,
+        res
+    ) => {
+
+        const id =
+            Number(
+                req.params.id
+            );
+
+
+        if (
+            !Number.isInteger(id) ||
+            id <= 0
+        ) {
+
+            return res
+                .status(400)
+                .json({
+                    message:
+                        "Invalid donation ID."
+                });
+
+        }
+
+
+        db.query(
+            `
+
+                DELETE FROM donations
+
+                WHERE id = ?
+
+            `,
+            [
+                id
+            ],
+            (
+                err,
+                result
+            ) => {
+
+                if (err) {
+
+                    console.error(
+                        "DELETE DONATION ERROR:",
+                        err
+                    );
+
+
+                    return res
+                        .status(500)
+                        .json({
+                            message:
+                                "Unable to delete donation."
+                        });
+
+                }
+
+
+                if (
+                    result.affectedRows ===
+                    0
+                ) {
+
+                    return res
+                        .status(404)
+                        .json({
+                            message:
+                                "Donation not found."
+                        });
+
+                }
+
+
+                return res.json({
+
+                    success:
+                        true,
+
+                    message:
+                        "Donation deleted successfully."
+
+                });
+
+            }
+        );
+
+    };
+
+
+// ======================================================
+// SUBMIT DONATION REQUEST
+//
+// ONLY:
+// Full Name
+// Phone
+// Email
+// Account Title
+// Amount
+// Transaction Date
+// ======================================================
+
+const submitDonationRequest =
+    async (
+        req,
+        res
+    ) => {
+
+        try {
+
+            const {
+
+                fullName,
+                phone,
+                email,
+                accountTitle,
+                amount,
+                transactionDate
+
+            } = req.body;
+
+
+            const normalizedEmail =
+                email
+                    ?.trim()
+                    .toLowerCase() ||
+                "";
+
+
+            if (
+                !fullName?.trim() ||
+                !phone?.trim() ||
+                !normalizedEmail ||
+                !accountTitle?.trim() ||
+                !amount ||
+                !transactionDate
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+                        message:
+                            "Please complete all donation request fields."
+                    });
+
+            }
+
+
+            if (
+                !validEmail(
+                    normalizedEmail
+                )
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+                        message:
+                            "Please enter a valid email address."
+                    });
+
+            }
+
+
+            if (
+                !validAmount(
+                    amount
+                )
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+                        message:
+                            "Donation amount must be greater than zero."
+                    });
+
+            }
+
+
+            const result =
+                await queryAsync(
+                    `
+
+                        INSERT INTO pending_donations
+                        (
+                            full_name,
+                            phone,
+                            email,
+                            account_title,
+                            amount,
+                            transaction_date,
+                            status
+                        )
+
+                        VALUES
+                        (
+                            ?,
+                            ?,
+                            ?,
+                            ?,
+                            ?,
+                            ?,
+                            'pending'
+                        )
+
+                    `,
+                    [
+
+                        fullName.trim(),
+
+                        phone.trim(),
+
+                        normalizedEmail,
+
+                        accountTitle.trim(),
+
+                        Number(amount),
+
+                        transactionDate
+
+                    ]
+                );
+
+
+            return res
+                .status(201)
+                .json({
+
+                    success:
+                        true,
+
+                    message:
+                        "Donation request submitted for verification.",
+
+                    id:
+                        result.insertId
+
+                });
+
+
+        } catch (
+            err
+        ) {
+
+            console.error(
+                "SUBMIT DONATION REQUEST ERROR:",
+                err
+            );
+
+
+            return res
+                .status(500)
+                .json({
                     message:
                         "Unable to submit donation request."
                 });
 
-            }
-
-
-            return res.status(201).json({
-
-                success: true,
-
-                message:
-                    "Donation submitted for verification.",
-
-                id:
-                    result.insertId
-
-            });
-
         }
-    );
 
-};
+    };
 
 
 // ======================================================
-// GET ALL REQUESTS
+// GET REQUEST HISTORY
 // MANAGER
 // ======================================================
 
-const getDonationRequests = (
-    req,
-    res
-) => {
+const getDonationRequests =
+    async (
+        req,
+        res
+    ) => {
 
-    const sql = `
+        try {
 
-        SELECT
-            id,
-            full_name,
-            phone,
-            trx_id,
-            amount,
-            transaction_date,
-            transaction_time,
-            status,
-            decision_at,
-            created_at
+            const requests =
+                await queryAsync(
+                    `
 
-        FROM pending_donations
+                        SELECT
 
-        ORDER BY
+                            id,
+                            full_name,
+                            phone,
+                            email,
+                            account_title,
+                            amount,
 
-            CASE
-                WHEN status = 'pending'
-                THEN 0
-                ELSE 1
-            END,
+                            DATE_FORMAT(
+                                transaction_date,
+                                '%Y-%m-%d'
+                            ) AS transaction_date,
 
-            created_at DESC
+                            status,
+                            decision_at,
+                            created_at
 
-    `;
+                        FROM pending_donations
 
+                        ORDER BY
 
-    db.query(
-        sql,
-        (err, result) => {
+                            CASE
+                                WHEN status = 'pending'
+                                    THEN 0
+                                ELSE 1
+                            END,
 
-            if (err) {
+                            created_at DESC
 
-                console.error(
-                    "GET REQUESTS ERROR:",
-                    err
+                    `
                 );
 
-                return res.status(500).json({
+
+            return res.json(
+                requests
+            );
+
+
+        } catch (
+            err
+        ) {
+
+            console.error(
+                "GET REQUESTS ERROR:",
+                err
+            );
+
+
+            return res
+                .status(500)
+                .json({
                     message:
                         "Unable to load donation requests."
                 });
 
-            }
-
-
-            return res.json(
-                result
-            );
-
         }
-    );
 
-};
+    };
 
 
 // ======================================================
-// PENDING REQUEST COUNT
+// PENDING COUNT
 // ======================================================
 
-const getPendingRequestCount = (
-    req,
-    res
-) => {
+const getPendingRequestCount =
+    async (
+        req,
+        res
+    ) => {
 
-    db.query(
-        `
+        try {
 
-            SELECT COUNT(*) AS count
+            const result =
+                await queryAsync(
+                    `
 
-            FROM pending_donations
+                        SELECT
+                            COUNT(*) AS count
 
-            WHERE status = 'pending'
+                        FROM pending_donations
 
-        `,
-        (err, result) => {
+                        WHERE
+                            status = 'pending'
 
-            if (err) {
-
-                console.error(
-                    "REQUEST COUNT ERROR:",
-                    err
+                    `
                 );
-
-                return res.status(500).json({
-                    message:
-                        "Unable to load request count."
-                });
-
-            }
 
 
             return res.json({
 
                 count:
                     Number(
-                        result[0]?.count ||
+                        result[0]
+                            ?.count ||
                         0
                     )
 
             });
 
-        }
-    );
 
-};
+        } catch (
+            err
+        ) {
 
-
-// ======================================================
-// ACCEPT REQUEST
-// ======================================================
-
-const approveDonationRequest = (
-    req,
-    res
-) => {
-
-    const id =
-        Number(req.params.id);
+            console.error(
+                "REQUEST COUNT ERROR:",
+                err
+            );
 
 
-    if (
-        !Number.isInteger(id) ||
-        id <= 0
-    ) {
-
-        return res.status(400).json({
-            message:
-                "Invalid donation request ID."
-        });
-
-    }
-
-
-    db.beginTransaction(
-        (transactionErr) => {
-
-            if (transactionErr) {
-
-                return res.status(500).json({
+            return res
+                .status(500)
+                .json({
                     message:
-                        "Unable to start approval."
+                        "Unable to load request count."
                 });
+
+        }
+
+    };
+
+
+// ======================================================
+// APPROVE REQUEST
+// ======================================================
+
+const approveDonationRequest =
+    async (
+        req,
+        res
+    ) => {
+
+        const id =
+            Number(
+                req.params.id
+            );
+
+
+        if (
+            !Number.isInteger(id) ||
+            id <= 0
+        ) {
+
+            return res
+                .status(400)
+                .json({
+                    message:
+                        "Invalid donation request ID."
+                });
+
+        }
+
+
+        let transactionStarted =
+            false;
+
+
+        try {
+
+            await beginTransactionAsync();
+
+            transactionStarted =
+                true;
+
+
+            // ==================================================
+            // LOCK REQUEST
+            // ==================================================
+
+            const requests =
+                await queryAsync(
+                    `
+
+                        SELECT *
+
+                        FROM pending_donations
+
+                        WHERE id = ?
+
+                        FOR UPDATE
+
+                    `,
+                    [
+                        id
+                    ]
+                );
+
+
+            if (
+                requests.length ===
+                0
+            ) {
+
+                await rollbackAsync();
+
+                transactionStarted =
+                    false;
+
+
+                return res
+                    .status(404)
+                    .json({
+                        message:
+                            "Donation request not found."
+                    });
 
             }
 
 
-            db.query(
-                `
-
-                    SELECT *
-
-                    FROM pending_donations
-
-                    WHERE id = ?
-
-                    FOR UPDATE
-
-                `,
-                [id],
-                (selectErr, rows) => {
-
-                    if (selectErr) {
-
-                        return db.rollback(
-                            () => {
-
-                                console.error(
-                                    selectErr
-                                );
-
-                                res.status(500).json({
-                                    message:
-                                        "Unable to read donation request."
-                                });
-
-                            }
-                        );
-
-                    }
+            const request =
+                requests[0];
 
 
-                    if (
-                        !rows.length
-                    ) {
+            if (
+                request.status !==
+                "pending"
+            ) {
 
-                        return db.rollback(
-                            () => {
+                await rollbackAsync();
 
-                                res.status(404).json({
-                                    message:
-                                        "Donation request not found."
-                                });
-
-                            }
-                        );
-
-                    }
+                transactionStarted =
+                    false;
 
 
-                    const request =
-                        rows[0];
+                return res
+                    .status(409)
+                    .json({
+                        message:
+                            `This request is already ${request.status}.`
+                    });
+
+            }
 
 
-                    if (
-                        request.status !==
-                        "pending"
-                    ) {
+            // ==================================================
+            // DONATION VALUES
+            //
+            // If donor already has a verified profile,
+            // use registered name + phone.
+            //
+            // This prevents donation request form from
+            // bypassing the OTP detail-change process.
+            // ==================================================
 
-                        return db.rollback(
-                            () => {
-
-                                res.status(409).json({
-                                    message:
-                                        `This request is already ${request.status}.`
-                                });
-
-                            }
-                        );
-
-                    }
+            let donationName =
+                request.full_name;
 
 
-                    // ONLY EXISTING DONATION COLUMNS
+            let donationPhone =
+                request.phone;
 
-                    db.query(
+
+            if (
+                request.email
+            ) {
+
+                const profiles =
+                    await queryAsync(
                         `
 
-                            INSERT INTO donations
-                            (
+                            SELECT
+
+                                id,
                                 full_name,
                                 phone,
-                                amount,
-                                donation_date
-                            )
+                                email
 
-                            VALUES (?, ?, ?, ?)
+                            FROM donor_profiles
+
+                            WHERE
+                                phone = ?
+                                OR LOWER(email)
+                                    = LOWER(?)
+
+                            LIMIT 1
 
                         `,
                         [
-                            request.full_name,
                             request.phone,
-                            request.amount,
-                            request.transaction_date
-                        ],
-                        (insertErr) => {
-
-                            if (insertErr) {
-
-                                return db.rollback(
-                                    () => {
-
-                                        console.error(
-                                            insertErr
-                                        );
-
-                                        res.status(500).json({
-                                            message:
-                                                "Unable to add approved donation."
-                                        });
-
-                                    }
-                                );
-
-                            }
+                            request.email
+                        ]
+                    );
 
 
-                            db.query(
-                                `
+                if (
+                    profiles.length >
+                    0
+                ) {
 
-                                    UPDATE pending_donations
-
-                                    SET
-                                        status = 'accepted',
-                                        decision_at = NOW()
-
-                                    WHERE id = ?
-
-                                `,
-                                [id],
-                                (updateErr) => {
-
-                                    if (updateErr) {
-
-                                        return db.rollback(
-                                            () => {
-
-                                                console.error(
-                                                    updateErr
-                                                );
-
-                                                res.status(500).json({
-                                                    message:
-                                                        "Unable to complete approval."
-                                                });
-
-                                            }
-                                        );
-
-                                    }
+                    const profile =
+                        profiles[0];
 
 
-                                    db.commit(
-                                        (commitErr) => {
-
-                                            if (commitErr) {
-
-                                                return db.rollback(
-                                                    () => {
-
-                                                        res.status(500).json({
-                                                            message:
-                                                                "Unable to complete approval."
-                                                        });
-
-                                                    }
-                                                );
-
-                                            }
+                    donationName =
+                        profile.full_name;
 
 
-                                            return res.json({
+                    donationPhone =
+                        profile.phone;
 
-                                                success: true,
+                } else {
 
-                                                message:
-                                                    "Donation request accepted."
+                    // ==========================================
+                    // NEW DONOR PROFILE
+                    // ==========================================
 
-                                            });
+                    await queryAsync(
+                        `
 
-                                        }
-                                    );
+                            INSERT INTO donor_profiles
+                            (
+                                full_name,
+                                phone,
+                                email
+                            )
 
-                                }
-                            );
+                            VALUES (?, ?, ?)
 
-                        }
+                        `,
+                        [
+
+                            request.full_name,
+
+                            request.phone,
+
+                            request.email
+                                .trim()
+                                .toLowerCase()
+
+                        ]
                     );
 
                 }
+
+            }
+
+
+            // ==================================================
+            // INSERT FINANCIAL RECORD
+            //
+            // IMPORTANT:
+            // ONLY EXISTING donations COLUMNS.
+            // ==================================================
+
+            await queryAsync(
+                `
+
+                    INSERT INTO donations
+                    (
+                        full_name,
+                        phone,
+                        amount,
+                        donation_date
+                    )
+
+                    VALUES (?, ?, ?, ?)
+
+                `,
+                [
+
+                    donationName,
+
+                    donationPhone,
+
+                    request.amount,
+
+                    request.transaction_date
+
+                ]
             );
 
-        }
-    );
 
-};
+            // ==================================================
+            // KEEP REQUEST HISTORY
+            // ==================================================
+
+            await queryAsync(
+                `
+
+                    UPDATE pending_donations
+
+                    SET
+                        status = 'accepted',
+                        decision_at = NOW()
+
+                    WHERE id = ?
+
+                `,
+                [
+                    id
+                ]
+            );
+
+
+            await commitAsync();
+
+            transactionStarted =
+                false;
+
+
+            return res.json({
+
+                success:
+                    true,
+
+                message:
+                    "Donation request accepted successfully."
+
+            });
+
+
+        } catch (
+            err
+        ) {
+
+            if (
+                transactionStarted
+            ) {
+
+                try {
+
+                    await rollbackAsync();
+
+                } catch (
+                    rollbackError
+                ) {
+
+                    console.error(
+                        "ROLLBACK ERROR:",
+                        rollbackError
+                    );
+
+                }
+
+            }
+
+
+            console.error(
+                "APPROVE REQUEST ERROR:",
+                err
+            );
+
+
+            if (
+                err.code ===
+                "ER_DUP_ENTRY"
+            ) {
+
+                return res
+                    .status(409)
+                    .json({
+                        message:
+                            "A donor profile already uses this phone number or email address."
+                    });
+
+            }
+
+
+            return res
+                .status(500)
+                .json({
+                    message:
+                        "Unable to accept donation request."
+                });
+
+        }
+
+    };
 
 
 // ======================================================
 // REJECT REQUEST
 // ======================================================
 
-const rejectDonationRequest = (
-    req,
-    res
-) => {
+const rejectDonationRequest =
+    async (
+        req,
+        res
+    ) => {
 
-    const id =
-        Number(req.params.id);
-
-
-    if (
-        !Number.isInteger(id) ||
-        id <= 0
-    ) {
-
-        return res.status(400).json({
-            message:
-                "Invalid donation request ID."
-        });
-
-    }
+        const id =
+            Number(
+                req.params.id
+            );
 
 
-    db.query(
-        `
+        if (
+            !Number.isInteger(id) ||
+            id <= 0
+        ) {
 
-            UPDATE pending_donations
-
-            SET
-                status = 'rejected',
-                decision_at = NOW()
-
-            WHERE
-                id = ?
-                AND status = 'pending'
-
-        `,
-        [id],
-        (err, result) => {
-
-            if (err) {
-
-                console.error(
-                    "REJECT REQUEST ERROR:",
-                    err
-                );
-
-                return res.status(500).json({
+            return res
+                .status(400)
+                .json({
                     message:
-                        "Unable to reject request."
+                        "Invalid donation request ID."
                 });
 
-            }
+        }
+
+
+        try {
+
+            const result =
+                await queryAsync(
+                    `
+
+                        UPDATE pending_donations
+
+                        SET
+                            status = 'rejected',
+                            decision_at = NOW()
+
+                        WHERE
+                            id = ?
+                            AND status = 'pending'
+
+                    `,
+                    [
+                        id
+                    ]
+                );
 
 
             if (
-                result.affectedRows === 0
+                result.affectedRows ===
+                0
             ) {
 
-                return res.status(409).json({
-                    message:
-                        "Request was not found or has already been processed."
-                });
+                return res
+                    .status(409)
+                    .json({
+                        message:
+                            "Request was not found or has already been processed."
+                    });
 
             }
 
 
             return res.json({
 
-                success: true,
+                success:
+                    true,
 
                 message:
                     "Donation request rejected."
 
             });
 
-        }
-    );
 
-};
+        } catch (
+            err
+        ) {
+
+            console.error(
+                "REJECT REQUEST ERROR:",
+                err
+            );
+
+
+            return res
+                .status(500)
+                .json({
+                    message:
+                        "Unable to reject request."
+                });
+
+        }
+
+    };
 
 
 module.exports = {
@@ -997,4 +1439,5 @@ module.exports = {
     approveDonationRequest,
 
     rejectDonationRequest
+
 };

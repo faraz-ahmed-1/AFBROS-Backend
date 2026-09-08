@@ -10,6 +10,7 @@ const cors =
 const app =
     express();
 
+
 // ======================================================
 // MIDDLEWARE
 // ======================================================
@@ -18,13 +19,16 @@ app.use(
     cors()
 );
 
+
 app.use(
     express.json()
 );
 
+
 app.use(
     express.urlencoded({
-        extended: true
+        extended:
+            true
     })
 );
 
@@ -34,44 +38,78 @@ app.use(
 // ======================================================
 
 const authRoutes =
-    require("./routes/authRoutes");
+    require(
+        "./routes/authRoutes"
+    );
+
 
 const donationRoutes =
-    require("./routes/donationRoutes");
+    require(
+        "./routes/donationRoutes"
+    );
+
 
 const expenseRoutes =
-    require("./routes/expenseRoutes");
+    require(
+        "./routes/expenseRoutes"
+    );
+
 
 const dashboardRoutes =
-    require("./routes/dashboardRoutes");
+    require(
+        "./routes/dashboardRoutes"
+    );
 
 
 const reportRoutes =
-    require("./routes/reportRoutes");
+    require(
+        "./routes/reportRoutes"
+    );
+
+
+const donorProfileRoutes =
+    require(
+        "./routes/donorProfileRoutes"
+    );
+
+
+// ======================================================
+// USE ROUTES
+// ======================================================
 
 app.use(
     "/api/auth",
     authRoutes
 );
 
+
 app.use(
     "/api/dashboard",
     dashboardRoutes
 );
+
 
 app.use(
     "/api/donations",
     donationRoutes
 );
 
+
 app.use(
     "/api/expenses",
     expenseRoutes
 );
 
+
 app.use(
     "/api/reports",
     reportRoutes
+);
+
+
+app.use(
+    "/api/donor-profile",
+    donorProfileRoutes
 );
 
 
@@ -81,13 +119,22 @@ app.use(
 
 app.get(
     "/api/health",
-    (req, res) => {
+    (
+        req,
+        res
+    ) => {
 
-        res.status(200).json({
-            success: true,
-            message:
-                "AFBROS API is running."
-        });
+        res
+            .status(200)
+            .json({
+
+                success:
+                    true,
+
+                message:
+                    "AFBROS API is running."
+
+            });
 
     }
 );
@@ -98,12 +145,17 @@ app.get(
 // ======================================================
 
 app.use(
-    (req, res) => {
+    (
+        req,
+        res
+    ) => {
 
-        res.status(404).json({
-            message:
-                "API route not found."
-        });
+        res
+            .status(404)
+            .json({
+                message:
+                    "API route not found."
+            });
 
     }
 );
