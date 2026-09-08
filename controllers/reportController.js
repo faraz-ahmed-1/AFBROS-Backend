@@ -73,14 +73,9 @@ const isValidDateString = (
 
 
     return (
-        date.getUTCFullYear() ===
-            year &&
-
-        date.getUTCMonth() ===
-            month - 1 &&
-
-        date.getUTCDate() ===
-            day
+        date.getUTCFullYear() === year &&
+        date.getUTCMonth() === month - 1 &&
+        date.getUTCDate() === day
     );
 
 };
@@ -112,15 +107,15 @@ const getStatement = async (
             "";
 
 
-        const donor =
+        let donor =
             req.query.donor
                 ?.trim() ||
             "";
 
 
-        // ==============================================
+        // ==================================================
         // VALIDATE TYPE
-        // ==============================================
+        // ==================================================
 
         if (
             ![
@@ -140,9 +135,22 @@ const getStatement = async (
         }
 
 
-        // ==============================================
+        // ==================================================
+        // EXPENSE STATEMENT DOES NOT USE DONOR
+        // ==================================================
+
+        if (
+            type === "out"
+        ) {
+
+            donor = "";
+
+        }
+
+
+        // ==================================================
         // VALIDATE DATE RANGE
-        // ==============================================
+        // ==================================================
 
         const hasFrom =
             Boolean(from);
@@ -153,8 +161,7 @@ const getStatement = async (
 
 
         if (
-            hasFrom !==
-            hasTo
+            hasFrom !== hasTo
         ) {
 
             return res
@@ -170,12 +177,8 @@ const getStatement = async (
         if (
             hasFrom &&
             (
-                !isValidDateString(
-                    from
-                ) ||
-                !isValidDateString(
-                    to
-                )
+                !isValidDateString(from) ||
+                !isValidDateString(to)
             )
         ) {
 
@@ -204,14 +207,83 @@ const getStatement = async (
         }
 
 
-        // ==============================================
+        // ==================================================
+        // VALIDATE DONOR NAME
+        // ==================================================
+        //
+        // Donor name is optional.
+        //
+        // But if entered:
+        // it MUST match an existing donor name.
+        // ==================================================
+
+        let canonicalDonorName =
+            "";
+
+
+        if (
+            donor &&
+            (
+                type === "all" ||
+                type === "in"
+            )
+        ) {
+
+            const donorCheckSql = `
+
+                SELECT DISTINCT
+                    full_name
+
+                FROM donations
+
+                WHERE
+                    LOWER(
+                        TRIM(full_name)
+                    ) = LOWER(?)
+
+                LIMIT 1
+
+            `;
+
+
+            const donorRows =
+                await queryAsync(
+                    donorCheckSql,
+                    [donor]
+                );
+
+
+            if (
+                donorRows.length === 0
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+                        message:
+                            "Donor name was not found in donation records. Please select a valid donor from the suggestions."
+                    });
+
+            }
+
+
+            canonicalDonorName =
+                donorRows[0]
+                    .full_name;
+
+        }
+
+
+        // ==================================================
         // DONATION CONDITIONS
-        // ==============================================
+        // ==================================================
 
         let donationWhere =
             `
-                WHERE donation_date
-                <= CURDATE()
+
+                WHERE
+                    donation_date <= CURDATE()
+
             `;
 
 
@@ -226,8 +298,9 @@ const getStatement = async (
 
             donationWhere = `
 
-                WHERE donation_date
-                BETWEEN ? AND ?
+                WHERE
+                    donation_date
+                    BETWEEN ? AND ?
 
             `;
 
@@ -240,25 +313,12 @@ const getStatement = async (
         }
 
 
-        // ==============================================
-        // OPTIONAL DONOR FILTER
-        // ==============================================
-        //
-        // Applies only to donations.
-        //
-        // Complete Statement:
-        // filters credit/donation entries,
-        // while expenses remain present.
-        //
-        // Donation Statement:
-        // filters donation entries.
-        //
-        // Expense Statement:
-        // ignored.
-        // ==============================================
+        // ==================================================
+        // EXACT DONOR FILTER
+        // ==================================================
 
         if (
-            donor &&
+            canonicalDonorName &&
             (
                 type === "all" ||
                 type === "in"
@@ -267,26 +327,31 @@ const getStatement = async (
 
             donationWhere += `
 
-                AND full_name LIKE ?
+                AND
+                    LOWER(
+                        TRIM(full_name)
+                    ) = LOWER(?)
 
             `;
 
 
             donationParams.push(
-                `%${donor}%`
+                canonicalDonorName
             );
 
         }
 
 
-        // ==============================================
+        // ==================================================
         // EXPENSE CONDITIONS
-        // ==============================================
+        // ==================================================
 
         let expenseWhere =
             `
-                WHERE expense_date
-                <= CURDATE()
+
+                WHERE
+                    expense_date <= CURDATE()
+
             `;
 
 
@@ -301,8 +366,9 @@ const getStatement = async (
 
             expenseWhere = `
 
-                WHERE expense_date
-                BETWEEN ? AND ?
+                WHERE
+                    expense_date
+                    BETWEEN ? AND ?
 
             `;
 
@@ -315,9 +381,9 @@ const getStatement = async (
         }
 
 
-        // ==============================================
+        // ==================================================
         // DONATION QUERY
-        // ==============================================
+        // ==================================================
 
         const donationSql = `
 
@@ -351,9 +417,9 @@ const getStatement = async (
         `;
 
 
-        // ==============================================
+        // ==================================================
         // EXPENSE QUERY
-        // ==============================================
+        // ==================================================
 
         const expenseSql = `
 
@@ -387,9 +453,9 @@ const getStatement = async (
         `;
 
 
-        // ==============================================
-        // LOAD REQUIRED DATA
-        // ==============================================
+        // ==================================================
+        // LOAD DATA
+        // ==================================================
 
         let donations =
             [];
@@ -427,9 +493,9 @@ const getStatement = async (
         }
 
 
-        // ==============================================
-        // COMBINE RECORDS
-        // ==============================================
+        // ==================================================
+        // COMBINE
+        // ==================================================
 
         const records = [
             ...donations,
@@ -437,9 +503,9 @@ const getStatement = async (
         ];
 
 
-        // ==============================================
+        // ==================================================
         // SORT BY DATE
-        // ==============================================
+        // ==================================================
 
         records.sort(
             (a, b) => {
@@ -476,9 +542,6 @@ const getStatement = async (
                 }
 
 
-                // Credit before debit
-                // on same date.
-
                 return (
                     a.transaction_type ===
                     "IN"
@@ -490,9 +553,9 @@ const getStatement = async (
         );
 
 
-        // ==============================================
+        // ==================================================
         // TOTAL CREDIT
-        // ==============================================
+        // ==================================================
 
         const totalIn =
             donations.reduce(
@@ -513,9 +576,9 @@ const getStatement = async (
             );
 
 
-        // ==============================================
+        // ==================================================
         // TOTAL DEBIT
-        // ==============================================
+        // ==================================================
 
         const totalOut =
             expenses.reduce(
@@ -536,18 +599,18 @@ const getStatement = async (
             );
 
 
-        // ==============================================
+        // ==================================================
         // BALANCE
-        // ==============================================
+        // ==================================================
 
         const balance =
             totalIn -
             totalOut;
 
 
-        // ==============================================
+        // ==================================================
         // RESPONSE
-        // ==============================================
+        // ==================================================
 
         return res
             .status(200)
@@ -563,7 +626,7 @@ const getStatement = async (
                 filters: {
 
                     donor:
-                        donor ||
+                        canonicalDonorName ||
                         null
 
                 },
