@@ -99,18 +99,17 @@ const getStatement = async (
 
 
         const from =
-            req.query.from ||
+            req.query.from?.trim() ||
             "";
 
 
         const to =
-            req.query.to ||
+            req.query.to?.trim() ||
             "";
 
 
         let donor =
-            req.query.donor
-                ?.trim() ||
+            req.query.donor?.trim() ||
             "";
 
 
@@ -128,16 +127,18 @@ const getStatement = async (
             )
         ) {
 
-            return res.status(400).json({
-                message:
-                    "Invalid statement type."
-            });
+            return res
+                .status(400)
+                .json({
+                    message:
+                        "Invalid statement type."
+                });
 
         }
 
 
         // ==================================================
-        // EXPENSE STATEMENT NEVER USES DONOR
+        // EXPENSE DOES NOT USE DONOR
         // ==================================================
 
         if (
@@ -145,8 +146,7 @@ const getStatement = async (
             "out"
         ) {
 
-            donor =
-                "";
+            donor = "";
 
         }
 
@@ -168,10 +168,12 @@ const getStatement = async (
             hasTo
         ) {
 
-            return res.status(400).json({
-                message:
-                    "Both From and To dates are required."
-            });
+            return res
+                .status(400)
+                .json({
+                    message:
+                        "Both From and To dates are required."
+                });
 
         }
 
@@ -188,10 +190,12 @@ const getStatement = async (
             )
         ) {
 
-            return res.status(400).json({
-                message:
-                    "Invalid statement date."
-            });
+            return res
+                .status(400)
+                .json({
+                    message:
+                        "Invalid statement date."
+                });
 
         }
 
@@ -201,10 +205,12 @@ const getStatement = async (
             from > to
         ) {
 
-            return res.status(400).json({
-                message:
-                    "From date cannot be after To date."
-            });
+            return res
+                .status(400)
+                .json({
+                    message:
+                        "From date cannot be after To date."
+                });
 
         }
 
@@ -230,14 +236,18 @@ const getStatement = async (
                     `
 
                         SELECT DISTINCT
-                            full_name
+                            TRIM(full_name)
+                                AS full_name
 
                         FROM donations
 
                         WHERE
                             LOWER(
                                 TRIM(full_name)
-                            ) = LOWER(?)
+                            ) =
+                            LOWER(
+                                TRIM(?)
+                            )
 
                         LIMIT 1
 
@@ -249,34 +259,42 @@ const getStatement = async (
 
 
             if (
-                donorRows.length ===
-                0
+                donorRows.length === 0
             ) {
 
-                return res.status(400).json({
-                    message:
-                        "Donor name was not found. Please select a valid donor from the suggestions."
-                });
+                return res
+                    .status(400)
+                    .json({
+                        message:
+                            "Donor was not found in donation records. Please select a donor from the suggestions."
+                    });
 
             }
 
 
+            /*
+                IMPORTANT FIX:
+
+                Always normalize the database
+                donor name before reusing it.
+            */
+
             canonicalDonorName =
-                donorRows[0]
-                    .full_name;
+                String(
+                    donorRows[0]
+                        .full_name ||
+                    ""
+                ).trim();
 
         }
 
 
         // ==================================================
-        // IMPORTANT:
+        // STATEMENT TYPE
+        // ==================================================
         //
-        // Dashboard normally = Complete Statement
-        //
-        // But when a donor is selected on Dashboard,
-        // generate that donor's Donation Statement only.
-        //
-        // This prevents unrelated expenses from appearing.
+        // Complete + selected donor
+        // becomes Donation Statement.
         // ==================================================
 
         let statementType =
@@ -284,8 +302,7 @@ const getStatement = async (
 
 
         if (
-            requestedType ===
-                "all" &&
+            requestedType === "all" &&
             canonicalDonorName
         ) {
 
@@ -335,6 +352,10 @@ const getStatement = async (
         }
 
 
+        // ==================================================
+        // DONOR FILTER
+        // ==================================================
+
         if (
             canonicalDonorName
         ) {
@@ -345,7 +366,10 @@ const getStatement = async (
                     AND
                         LOWER(
                             TRIM(full_name)
-                        ) = LOWER(?)
+                        ) =
+                        LOWER(
+                            TRIM(?)
+                        )
 
                 `;
 
@@ -398,7 +422,7 @@ const getStatement = async (
 
 
         // ==================================================
-        // DONATIONS SQL
+        // DONATION QUERY
         // ==================================================
 
         const donationSql =
@@ -416,9 +440,10 @@ const getStatement = async (
                     'IN'
                         AS transaction_type,
 
-                    full_name,
+                    TRIM(full_name)
+                        AS full_name,
 
-                    phone
+                    TRIM(phone)
                         AS details,
 
                     amount
@@ -435,7 +460,7 @@ const getStatement = async (
 
 
         // ==================================================
-        // EXPENSE SQL
+        // EXPENSE QUERY
         // ==================================================
 
         const expenseSql =
@@ -512,7 +537,28 @@ const getStatement = async (
 
 
         // ==================================================
-        // COMBINE
+        // PREVENT EMPTY DONOR PDF
+        // ==================================================
+
+        if (
+            canonicalDonorName &&
+            donations.length === 0
+        ) {
+
+            return res
+                .status(404)
+                .json({
+                    message:
+                        hasFrom && hasTo
+                            ? "No donations were found for this donor in the selected date range."
+                            : "No donation records were found for this donor."
+                });
+
+        }
+
+
+        // ==================================================
+        // COMBINE RECORDS
         // ==================================================
 
         const records = [
@@ -521,8 +567,15 @@ const getStatement = async (
         ];
 
 
+        // ==================================================
+        // SORT
+        // ==================================================
+
         records.sort(
-            (a, b) => {
+            (
+                a,
+                b
+            ) => {
 
                 const dateCompare =
                     String(
@@ -535,8 +588,7 @@ const getStatement = async (
 
 
                 if (
-                    dateCompare !==
-                    0
+                    dateCompare !== 0
                 ) {
 
                     return dateCompare;
@@ -558,7 +610,8 @@ const getStatement = async (
 
 
                 return (
-                    a.transaction_type === "IN"
+                    a.transaction_type ===
+                    "IN"
                         ? -1
                         : 1
                 );
@@ -568,36 +621,56 @@ const getStatement = async (
 
 
         // ==================================================
-        // TOTALS
+        // TOTAL CREDIT
         // ==================================================
 
         const totalIn =
             donations.reduce(
                 (
                     total,
-                    row
-                ) =>
-                    total +
-                    Number(
-                        row.amount
-                    ),
+                    donation
+                ) => {
+
+                    return (
+                        total +
+                        Number(
+                            donation.amount ||
+                            0
+                        )
+                    );
+
+                },
                 0
             );
 
+
+        // ==================================================
+        // TOTAL DEBIT
+        // ==================================================
 
         const totalOut =
             expenses.reduce(
                 (
                     total,
-                    row
-                ) =>
-                    total +
-                    Number(
-                        row.amount
-                    ),
+                    expense
+                ) => {
+
+                    return (
+                        total +
+                        Number(
+                            expense.amount ||
+                            0
+                        )
+                    );
+
+                },
                 0
             );
 
+
+        // ==================================================
+        // BALANCE
+        // ==================================================
 
         const balance =
             totalIn -
@@ -608,68 +681,63 @@ const getStatement = async (
         // RESPONSE
         // ==================================================
 
-        return res.status(200).json({
+        return res
+            .status(200)
+            .json({
 
-            success:
-                true,
-
-
-            /*
-                This is the actual PDF type.
-
-                Dashboard + donor:
-                becomes "in".
-            */
-
-            type:
-                statementType,
+                success:
+                    true,
 
 
-            requestedType,
+                type:
+                    statementType,
 
 
-            filters: {
-
-                donor:
-                    canonicalDonorName ||
-                    null
-
-            },
+                requestedType,
 
 
-            range: {
+                filters: {
 
-                from:
-                    hasFrom
-                        ? from
-                        : null,
+                    donor:
+                        canonicalDonorName ||
+                        null
 
-                to:
-                    hasTo
-                        ? to
-                        : null,
-
-                complete:
-                    !hasFrom &&
-                    !hasTo
-
-            },
+                },
 
 
-            totals: {
+                range: {
 
-                totalIn,
+                    from:
+                        hasFrom
+                            ? from
+                            : null,
 
-                totalOut,
+                    to:
+                        hasTo
+                            ? to
+                            : null,
 
-                balance
+                    complete:
+                        !hasFrom &&
+                        !hasTo
 
-            },
+                },
 
 
-            records
+                totals: {
 
-        });
+                    totalIn,
+
+                    totalOut,
+
+                    balance
+
+                },
+
+
+                records
+
+            });
 
 
     } catch (err) {
@@ -680,10 +748,12 @@ const getStatement = async (
         );
 
 
-        return res.status(500).json({
-            message:
-                "Unable to generate financial statement."
-        });
+        return res
+            .status(500)
+            .json({
+                message:
+                    "Unable to generate financial statement."
+            });
 
     }
 
