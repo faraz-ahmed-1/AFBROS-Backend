@@ -26,7 +26,7 @@ const resend =
 
 const FROM_EMAIL =
     process.env.RESEND_FROM_EMAIL ||
-    "afbros@nexvrtex.dev";
+    "afbros@nexvertex.dev";
 
 
 // ======================================================
