@@ -10,7 +10,6 @@ const cors =
 const app =
     express();
 
-
 // ======================================================
 // MIDDLEWARE
 // ======================================================
@@ -47,6 +46,9 @@ const dashboardRoutes =
     require("./routes/dashboardRoutes");
 
 
+const reportRoutes =
+    require("./routes/reportRoutes");
+
 app.use(
     "/api/auth",
     authRoutes
@@ -65,6 +67,11 @@ app.use(
 app.use(
     "/api/expenses",
     expenseRoutes
+);
+
+app.use(
+    "/api/reports",
+    reportRoutes
 );
 
 
