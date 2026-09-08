@@ -4,6 +4,8 @@ const express =
 const router =
     express.Router();
 
+const requireManager =
+    require("../middleware/requireManager");
 
 const {
     getStatement
@@ -13,11 +15,12 @@ const {
 
 
 // ======================================================
-// PDF STATEMENT DATA
+// FINANCE MANAGER ONLY
 // ======================================================
 
 router.get(
     "/statement",
+    requireManager,
     getStatement
 );
 
