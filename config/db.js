@@ -2,9 +2,12 @@ require("dotenv").config();
 
 const mysql = require("mysql2");
 
-// ======================================================
-// CREATE MYSQL CONNECTION
-// ======================================================
+
+console.log("HOST:", process.env.DB_HOST);
+console.log("PORT:", process.env.DB_PORT);
+console.log("USER:", process.env.DB_USER);
+console.log("DB:", process.env.DB_NAME);
+
 
 const connection = mysql.createConnection({
 
@@ -26,12 +29,79 @@ const connection = mysql.createConnection({
 
 
 // ======================================================
-// CREATE REQUIRED TABLES
+// ENSURE COLUMN EXISTS
+// ======================================================
+
+const ensureColumn = (
+    table,
+    column,
+    definition
+) => {
+
+    connection.query(
+        `SHOW COLUMNS FROM ${table} LIKE ?`,
+        [column],
+        (err, result) => {
+
+            if (err) {
+
+                console.error(
+                    `Unable to check ${column}:`,
+                    err
+                );
+
+                return;
+            }
+
+
+            if (result.length > 0) {
+
+                console.log(
+                    `${table}.${column} ready.`
+                );
+
+                return;
+            }
+
+
+            connection.query(
+                `
+                    ALTER TABLE ${table}
+                    ADD COLUMN ${column} ${definition}
+                `,
+                (alterErr) => {
+
+                    if (alterErr) {
+
+                        console.error(
+                            `Unable to add ${column}:`,
+                            alterErr
+                        );
+
+                        return;
+                    }
+
+
+                    console.log(
+                        `${table}.${column} created.`
+                    );
+
+                }
+            );
+
+        }
+    );
+
+};
+
+
+// ======================================================
+// INITIALIZE TABLES
 // ======================================================
 
 const initializeTables = () => {
 
-    const pendingDonationsTable = `
+    const requestTable = `
 
         CREATE TABLE IF NOT EXISTS pending_donations (
 
@@ -49,6 +119,14 @@ const initializeTables = () => {
 
             transaction_time TIME NOT NULL,
 
+            status ENUM(
+                'pending',
+                'accepted',
+                'rejected'
+            ) NOT NULL DEFAULT 'pending',
+
+            decision_at DATETIME NULL,
+
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 
         )
@@ -57,20 +135,51 @@ const initializeTables = () => {
 
 
     connection.query(
-        pendingDonationsTable,
+        requestTable,
         (err) => {
 
             if (err) {
 
                 console.error(
-                    "Pending donations table creation failed:"
+                    "Donation requests table error:",
+                    err
                 );
 
-                console.error(err);
-
                 return;
-
             }
+
+
+            console.log(
+                "Donation requests table ready."
+            );
+
+
+            // Existing table migration
+
+            ensureColumn(
+                "pending_donations",
+                "status",
+                `
+                    ENUM(
+                        'pending',
+                        'accepted',
+                        'rejected'
+                    )
+                    NOT NULL
+                    DEFAULT 'pending'
+                    AFTER transaction_time
+                `
+            );
+
+
+            ensureColumn(
+                "pending_donations",
+                "decision_at",
+                `
+                    DATETIME NULL
+                    AFTER status
+                `
+            );
 
         }
     );
@@ -79,7 +188,7 @@ const initializeTables = () => {
 
 
 // ======================================================
-// CONNECT TO AIVEN MYSQL
+// CONNECT
 // ======================================================
 
 connection.connect((err) => {
@@ -93,11 +202,14 @@ connection.connect((err) => {
         console.error(err);
 
         return;
-
     }
 
 
-    // Create any missing tables
+    console.log(
+        "Connected to Aiven MySQL"
+    );
+
+
     initializeTables();
 
 });

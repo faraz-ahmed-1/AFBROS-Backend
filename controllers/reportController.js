@@ -5,7 +5,10 @@ const db = require("../config/db");
 // QUERY HELPER
 // ======================================================
 
-const queryAsync = (sql, params = []) => {
+const queryAsync = (
+    sql,
+    params = []
+) => {
 
     return new Promise(
         (resolve, reject) => {
@@ -36,11 +39,16 @@ const queryAsync = (sql, params = []) => {
 // VALID DATE FORMAT
 // ======================================================
 
-const isValidDateString = (value) => {
+const isValidDateString = (
+    value
+) => {
 
     if (
-        !/^\d{4}-\d{2}-\d{2}$/.test(value)
+        !/^\d{4}-\d{2}-\d{2}$/.test(
+            value
+        )
     ) {
+
         return false;
     }
 
@@ -65,9 +73,14 @@ const isValidDateString = (value) => {
 
 
     return (
-        date.getUTCFullYear() === year &&
-        date.getUTCMonth() === month - 1 &&
-        date.getUTCDate() === day
+        date.getUTCFullYear() ===
+            year &&
+
+        date.getUTCMonth() ===
+            month - 1 &&
+
+        date.getUTCDate() ===
+            day
     );
 
 };
@@ -85,13 +98,24 @@ const getStatement = async (
     try {
 
         const type =
-            req.query.type || "all";
+            req.query.type ||
+            "all";
+
 
         const from =
-            req.query.from || "";
+            req.query.from ||
+            "";
+
 
         const to =
-            req.query.to || "";
+            req.query.to ||
+            "";
+
+
+        const donor =
+            req.query.donor
+                ?.trim() ||
+            "";
 
 
         // ==============================================
@@ -106,33 +130,39 @@ const getStatement = async (
             ].includes(type)
         ) {
 
-            return res.status(400).json({
-                message:
-                    "Invalid statement type."
-            });
+            return res
+                .status(400)
+                .json({
+                    message:
+                        "Invalid statement type."
+                });
 
         }
 
 
         // ==============================================
-        // VALIDATE RANGE
+        // VALIDATE DATE RANGE
         // ==============================================
 
         const hasFrom =
             Boolean(from);
+
 
         const hasTo =
             Boolean(to);
 
 
         if (
-            hasFrom !== hasTo
+            hasFrom !==
+            hasTo
         ) {
 
-            return res.status(400).json({
-                message:
-                    "Both From and To dates are required."
-            });
+            return res
+                .status(400)
+                .json({
+                    message:
+                        "Both From and To dates are required."
+                });
 
         }
 
@@ -140,15 +170,21 @@ const getStatement = async (
         if (
             hasFrom &&
             (
-                !isValidDateString(from) ||
-                !isValidDateString(to)
+                !isValidDateString(
+                    from
+                ) ||
+                !isValidDateString(
+                    to
+                )
             )
         ) {
 
-            return res.status(400).json({
-                message:
-                    "Invalid statement date."
-            });
+            return res
+                .status(400)
+                .json({
+                    message:
+                        "Invalid statement date."
+                });
 
         }
 
@@ -158,27 +194,29 @@ const getStatement = async (
             from > to
         ) {
 
-            return res.status(400).json({
-                message:
-                    "From date cannot be after To date."
-            });
+            return res
+                .status(400)
+                .json({
+                    message:
+                        "From date cannot be after To date."
+                });
 
         }
 
 
         // ==============================================
-        // DATE CONDITIONS
+        // DONATION CONDITIONS
         // ==============================================
 
         let donationWhere =
-            "WHERE donation_date <= CURDATE()";
+            `
+                WHERE donation_date
+                <= CURDATE()
+            `;
 
-        let expenseWhere =
-            "WHERE expense_date <= CURDATE()";
 
-        let donationParams = [];
-
-        let expenseParams = [];
+        let donationParams =
+            [];
 
 
         if (
@@ -187,13 +225,10 @@ const getStatement = async (
         ) {
 
             donationWhere = `
+
                 WHERE donation_date
                 BETWEEN ? AND ?
-            `;
 
-            expenseWhere = `
-                WHERE expense_date
-                BETWEEN ? AND ?
             `;
 
 
@@ -201,6 +236,76 @@ const getStatement = async (
                 from,
                 to
             ];
+
+        }
+
+
+        // ==============================================
+        // OPTIONAL DONOR FILTER
+        // ==============================================
+        //
+        // Applies only to donations.
+        //
+        // Complete Statement:
+        // filters credit/donation entries,
+        // while expenses remain present.
+        //
+        // Donation Statement:
+        // filters donation entries.
+        //
+        // Expense Statement:
+        // ignored.
+        // ==============================================
+
+        if (
+            donor &&
+            (
+                type === "all" ||
+                type === "in"
+            )
+        ) {
+
+            donationWhere += `
+
+                AND full_name LIKE ?
+
+            `;
+
+
+            donationParams.push(
+                `%${donor}%`
+            );
+
+        }
+
+
+        // ==============================================
+        // EXPENSE CONDITIONS
+        // ==============================================
+
+        let expenseWhere =
+            `
+                WHERE expense_date
+                <= CURDATE()
+            `;
+
+
+        let expenseParams =
+            [];
+
+
+        if (
+            hasFrom &&
+            hasTo
+        ) {
+
+            expenseWhere = `
+
+                WHERE expense_date
+                BETWEEN ? AND ?
+
+            `;
+
 
             expenseParams = [
                 from,
@@ -225,11 +330,13 @@ const getStatement = async (
                     '%Y-%m-%d'
                 ) AS record_date,
 
-                'IN' AS transaction_type,
+                'IN'
+                    AS transaction_type,
 
                 full_name,
 
-                phone AS details,
+                phone
+                    AS details,
 
                 amount
 
@@ -259,11 +366,13 @@ const getStatement = async (
                     '%Y-%m-%d'
                 ) AS record_date,
 
-                'OUT' AS transaction_type,
+                'OUT'
+                    AS transaction_type,
 
                 full_name,
 
-                description AS details,
+                description
+                    AS details,
 
                 amount
 
@@ -282,9 +391,12 @@ const getStatement = async (
         // LOAD REQUIRED DATA
         // ==============================================
 
-        let donations = [];
+        let donations =
+            [];
 
-        let expenses = [];
+
+        let expenses =
+            [];
 
 
         if (
@@ -325,6 +437,10 @@ const getStatement = async (
         ];
 
 
+        // ==============================================
+        // SORT BY DATE
+        // ==============================================
+
         records.sort(
             (a, b) => {
 
@@ -341,7 +457,9 @@ const getStatement = async (
                 if (
                     dateCompare !== 0
                 ) {
+
                     return dateCompare;
+
                 }
 
 
@@ -354,14 +472,16 @@ const getStatement = async (
                         Number(a.id) -
                         Number(b.id)
                     );
+
                 }
 
 
-                // IN shown before OUT
-                // when both have same date.
+                // Credit before debit
+                // on same date.
 
                 return (
-                    a.transaction_type === "IN"
+                    a.transaction_type ===
+                    "IN"
                         ? -1
                         : 1
                 );
@@ -371,30 +491,54 @@ const getStatement = async (
 
 
         // ==============================================
-        // TOTALS
+        // TOTAL CREDIT
         // ==============================================
 
         const totalIn =
             donations.reduce(
-                (sum, donation) =>
-                    sum +
-                    Number(
-                        donation.amount
-                    ),
+                (
+                    sum,
+                    donation
+                ) => {
+
+                    return (
+                        sum +
+                        Number(
+                            donation.amount
+                        )
+                    );
+
+                },
                 0
             );
 
+
+        // ==============================================
+        // TOTAL DEBIT
+        // ==============================================
 
         const totalOut =
             expenses.reduce(
-                (sum, expense) =>
-                    sum +
-                    Number(
-                        expense.amount
-                    ),
+                (
+                    sum,
+                    expense
+                ) => {
+
+                    return (
+                        sum +
+                        Number(
+                            expense.amount
+                        )
+                    );
+
+                },
                 0
             );
 
+
+        // ==============================================
+        // BALANCE
+        // ==============================================
 
         const balance =
             totalIn -
@@ -405,43 +549,59 @@ const getStatement = async (
         // RESPONSE
         // ==============================================
 
-        return res.status(200).json({
+        return res
+            .status(200)
+            .json({
 
-            success: true,
+                success:
+                    true,
 
-            type,
 
-            range: {
+                type,
 
-                from:
-                    hasFrom
-                        ? from
-                        : null,
 
-                to:
-                    hasTo
-                        ? to
-                        : null,
+                filters: {
 
-                complete:
-                    !hasFrom &&
-                    !hasTo
+                    donor:
+                        donor ||
+                        null
 
-            },
+                },
 
-            totals: {
 
-                totalIn,
+                range: {
 
-                totalOut,
+                    from:
+                        hasFrom
+                            ? from
+                            : null,
 
-                balance
+                    to:
+                        hasTo
+                            ? to
+                            : null,
 
-            },
+                    complete:
+                        !hasFrom &&
+                        !hasTo
 
-            records
+                },
 
-        });
+
+                totals: {
+
+                    totalIn,
+
+                    totalOut,
+
+                    balance
+
+                },
+
+
+                records
+
+            });
 
 
     } catch (err) {
@@ -452,10 +612,12 @@ const getStatement = async (
         );
 
 
-        return res.status(500).json({
-            message:
-                "Unable to generate financial statement."
-        });
+        return res
+            .status(500)
+            .json({
+                message:
+                    "Unable to generate financial statement."
+            });
 
     }
 

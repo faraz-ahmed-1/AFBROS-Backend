@@ -20,7 +20,9 @@ const {
 
     submitDonationRequest,
 
-    getPendingDonationRequests,
+    getDonationRequests,
+
+    getPendingRequestCount,
 
     approveDonationRequest,
 
@@ -32,17 +34,15 @@ const {
 
 
 // ======================================================
-// PUBLIC / GUEST
+// PUBLIC
 // ======================================================
 
-// Read approved donations
 router.get(
     "/",
     getDonations
 );
 
 
-// Guest submits donation verification
 router.post(
     "/requests",
     submitDonationRequest
@@ -50,18 +50,23 @@ router.post(
 
 
 // ======================================================
-// FINANCE MANAGER
+// MANAGER REQUESTS
 // ======================================================
 
-// Pending donation list
 router.get(
-    "/requests",
+    "/requests/count",
     requireManager,
-    getPendingDonationRequests
+    getPendingRequestCount
 );
 
 
-// Approve
+router.get(
+    "/requests",
+    requireManager,
+    getDonationRequests
+);
+
+
 router.post(
     "/requests/:id/approve",
     requireManager,
@@ -69,15 +74,17 @@ router.post(
 );
 
 
-// Reject
-router.delete(
+router.post(
     "/requests/:id/reject",
     requireManager,
     rejectDonationRequest
 );
 
 
-// Direct manager donation
+// ======================================================
+// MANAGER DONATION CRUD
+// ======================================================
+
 router.post(
     "/",
     requireManager,
@@ -85,7 +92,6 @@ router.post(
 );
 
 
-// Edit donation
 router.put(
     "/:id",
     requireManager,
@@ -93,7 +99,6 @@ router.put(
 );
 
 
-// Delete donation
 router.delete(
     "/:id",
     requireManager,
@@ -101,5 +106,4 @@ router.delete(
 );
 
 
-module.exports =
-    router;
+module.exports = router;

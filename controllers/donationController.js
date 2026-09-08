@@ -5,20 +5,21 @@ const db = require("../config/db");
 // HELPERS
 // ======================================================
 
-const isValidAmount = (value) => {
+const validAmount = (value) => {
 
-    const amount = Number(value);
+    const number =
+        Number(value);
 
     return (
-        Number.isFinite(amount) &&
-        amount > 0
+        Number.isFinite(number) &&
+        number > 0
     );
 
 };
 
 
 // ======================================================
-// ADD DONATION - FINANCE MANAGER
+// ADD DONATION - MANAGER
 // ======================================================
 
 const addDonation = (req, res) => {
@@ -46,7 +47,7 @@ const addDonation = (req, res) => {
     }
 
 
-    if (!isValidAmount(amount)) {
+    if (!validAmount(amount)) {
 
         return res.status(400).json({
             message:
@@ -57,6 +58,7 @@ const addDonation = (req, res) => {
 
 
     const sql = `
+
         INSERT INTO donations
         (
             full_name,
@@ -64,7 +66,9 @@ const addDonation = (req, res) => {
             amount,
             donation_date
         )
+
         VALUES (?, ?, ?, ?)
+
     `;
 
 
@@ -112,7 +116,8 @@ const addDonation = (req, res) => {
 
 
 // ======================================================
-// GET DONATIONS - PUBLIC / GUEST
+// GET DONATIONS
+// PUBLIC / GUEST
 // ======================================================
 
 const getDonations = (req, res) => {
@@ -149,32 +154,37 @@ const getDonations = (req, res) => {
         sortOptions.id;
 
 
-    const searchValue =
+    const value =
         `%${search}%`;
 
 
     const sql = `
+
         SELECT
             id,
             full_name,
             phone,
             amount,
             donation_date
+
         FROM donations
+
         WHERE
             full_name LIKE ?
             OR phone LIKE ?
             OR CAST(amount AS CHAR) LIKE ?
+
         ORDER BY ${orderBy}
+
     `;
 
 
     db.query(
         sql,
         [
-            searchValue,
-            searchValue,
-            searchValue
+            value,
+            value,
+            value
         ],
         (err, result) => {
 
@@ -204,18 +214,18 @@ const getDonations = (req, res) => {
 
 
 // ======================================================
-// UPDATE DONATION - FINANCE MANAGER
+// UPDATE DONATION
 // ======================================================
 
 const updateDonation = (req, res) => {
 
-    const donationId =
+    const id =
         Number(req.params.id);
 
 
     if (
-        !Number.isInteger(donationId) ||
-        donationId <= 0
+        !Number.isInteger(id) ||
+        id <= 0
     ) {
 
         return res.status(400).json({
@@ -249,7 +259,7 @@ const updateDonation = (req, res) => {
     }
 
 
-    if (!isValidAmount(amount)) {
+    if (!validAmount(amount)) {
 
         return res.status(400).json({
             message:
@@ -260,13 +270,17 @@ const updateDonation = (req, res) => {
 
 
     const sql = `
+
         UPDATE donations
+
         SET
             full_name = ?,
             phone = ?,
             amount = ?,
             donation_date = ?
+
         WHERE id = ?
+
     `;
 
 
@@ -277,7 +291,7 @@ const updateDonation = (req, res) => {
             phone.trim(),
             Number(amount),
             date,
-            donationId
+            id
         ],
         (err, result) => {
 
@@ -302,13 +316,13 @@ const updateDonation = (req, res) => {
 
                 return res.status(404).json({
                     message:
-                        "Donation record not found."
+                        "Donation not found."
                 });
 
             }
 
 
-            return res.status(200).json({
+            return res.json({
 
                 success: true,
 
@@ -324,18 +338,18 @@ const updateDonation = (req, res) => {
 
 
 // ======================================================
-// DELETE DONATION - FINANCE MANAGER
+// DELETE DONATION
 // ======================================================
 
 const deleteDonation = (req, res) => {
 
-    const donationId =
+    const id =
         Number(req.params.id);
 
 
     if (
-        !Number.isInteger(donationId) ||
-        donationId <= 0
+        !Number.isInteger(id) ||
+        id <= 0
     ) {
 
         return res.status(400).json({
@@ -351,7 +365,7 @@ const deleteDonation = (req, res) => {
             DELETE FROM donations
             WHERE id = ?
         `,
-        [donationId],
+        [id],
         (err, result) => {
 
             if (err) {
@@ -375,13 +389,13 @@ const deleteDonation = (req, res) => {
 
                 return res.status(404).json({
                     message:
-                        "Donation record not found."
+                        "Donation not found."
                 });
 
             }
 
 
-            return res.status(200).json({
+            return res.json({
 
                 success: true,
 
@@ -397,7 +411,7 @@ const deleteDonation = (req, res) => {
 
 
 // ======================================================
-// GUEST SUBMIT DONATION REQUEST
+// SUBMIT DONATION REQUEST
 // ======================================================
 
 const submitDonationRequest = (
@@ -432,7 +446,7 @@ const submitDonationRequest = (
     }
 
 
-    if (!isValidAmount(amount)) {
+    if (!validAmount(amount)) {
 
         return res.status(400).json({
             message:
@@ -443,6 +457,7 @@ const submitDonationRequest = (
 
 
     const sql = `
+
         INSERT INTO pending_donations
         (
             full_name,
@@ -450,9 +465,12 @@ const submitDonationRequest = (
             trx_id,
             amount,
             transaction_date,
-            transaction_time
+            transaction_time,
+            status
         )
-        VALUES (?, ?, ?, ?, ?, ?)
+
+        VALUES (?, ?, ?, ?, ?, ?, 'pending')
+
     `;
 
 
@@ -471,7 +489,7 @@ const submitDonationRequest = (
             if (err) {
 
                 console.error(
-                    "SUBMIT PENDING DONATION ERROR:",
+                    "SUBMIT REQUEST ERROR:",
                     err
                 );
 
@@ -491,7 +509,7 @@ const submitDonationRequest = (
 
                 return res.status(500).json({
                     message:
-                        "Unable to submit donation for verification."
+                        "Unable to submit donation request."
                 });
 
             }
@@ -502,7 +520,7 @@ const submitDonationRequest = (
                 success: true,
 
                 message:
-                    "Donation details submitted for verification.",
+                    "Donation submitted for verification.",
 
                 id:
                     result.insertId
@@ -516,15 +534,17 @@ const submitDonationRequest = (
 
 
 // ======================================================
-// GET PENDING DONATIONS - FINANCE MANAGER
+// GET ALL REQUESTS
+// MANAGER
 // ======================================================
 
-const getPendingDonationRequests = (
+const getDonationRequests = (
     req,
     res
 ) => {
 
     const sql = `
+
         SELECT
             id,
             full_name,
@@ -533,9 +553,22 @@ const getPendingDonationRequests = (
             amount,
             transaction_date,
             transaction_time,
+            status,
+            decision_at,
             created_at
+
         FROM pending_donations
-        ORDER BY created_at DESC
+
+        ORDER BY
+
+            CASE
+                WHEN status = 'pending'
+                THEN 0
+                ELSE 1
+            END,
+
+            created_at DESC
+
     `;
 
 
@@ -546,19 +579,19 @@ const getPendingDonationRequests = (
             if (err) {
 
                 console.error(
-                    "GET PENDING DONATIONS ERROR:",
+                    "GET REQUESTS ERROR:",
                     err
                 );
 
                 return res.status(500).json({
                     message:
-                        "Unable to load pending donations."
+                        "Unable to load donation requests."
                 });
 
             }
 
 
-            return res.status(200).json(
+            return res.json(
                 result
             );
 
@@ -569,18 +602,59 @@ const getPendingDonationRequests = (
 
 
 // ======================================================
-// APPROVE GUEST DONATION
+// PENDING REQUEST COUNT
 // ======================================================
-//
-// IMPORTANT:
-// Only existing donation table columns are inserted:
-//
-// full_name
-// phone
-// amount
-// donation_date
-//
-// trx_id and transaction_time are NOT inserted.
+
+const getPendingRequestCount = (
+    req,
+    res
+) => {
+
+    db.query(
+        `
+
+            SELECT COUNT(*) AS count
+
+            FROM pending_donations
+
+            WHERE status = 'pending'
+
+        `,
+        (err, result) => {
+
+            if (err) {
+
+                console.error(
+                    "REQUEST COUNT ERROR:",
+                    err
+                );
+
+                return res.status(500).json({
+                    message:
+                        "Unable to load request count."
+                });
+
+            }
+
+
+            return res.json({
+
+                count:
+                    Number(
+                        result[0]?.count ||
+                        0
+                    )
+
+            });
+
+        }
+    );
+
+};
+
+
+// ======================================================
+// ACCEPT REQUEST
 // ======================================================
 
 const approveDonationRequest = (
@@ -588,13 +662,13 @@ const approveDonationRequest = (
     res
 ) => {
 
-    const requestId =
+    const id =
         Number(req.params.id);
 
 
     if (
-        !Number.isInteger(requestId) ||
-        requestId <= 0
+        !Number.isInteger(id) ||
+        id <= 0
     ) {
 
         return res.status(400).json({
@@ -605,142 +679,207 @@ const approveDonationRequest = (
     }
 
 
-    const selectSql = `
-        SELECT *
-        FROM pending_donations
-        WHERE id = ?
-    `;
+    db.beginTransaction(
+        (transactionErr) => {
 
-
-    db.query(
-        selectSql,
-        [requestId],
-        (selectErr, rows) => {
-
-            if (selectErr) {
-
-                console.error(
-                    "APPROVE SELECT ERROR:",
-                    selectErr
-                );
+            if (transactionErr) {
 
                 return res.status(500).json({
                     message:
-                        "Unable to read donation request."
+                        "Unable to start approval."
                 });
 
             }
-
-
-            if (
-                !rows ||
-                rows.length === 0
-            ) {
-
-                return res.status(404).json({
-                    message:
-                        "Donation request not found."
-                });
-
-            }
-
-
-            const request =
-                rows[0];
-
-
-            /*
-                INSERT ONLY EXISTING
-                DONATIONS TABLE COLUMNS
-            */
-
-            const insertSql = `
-                INSERT INTO donations
-                (
-                    full_name,
-                    phone,
-                    amount,
-                    donation_date
-                )
-                VALUES (?, ?, ?, ?)
-            `;
 
 
             db.query(
-                insertSql,
-                [
-                    request.full_name,
-                    request.phone,
-                    request.amount,
-                    request.transaction_date
-                ],
-                (
-                    insertErr,
-                    insertResult
-                ) => {
+                `
 
-                    if (insertErr) {
+                    SELECT *
 
-                        console.error(
-                            "APPROVE INSERT ERROR:",
-                            insertErr
+                    FROM pending_donations
+
+                    WHERE id = ?
+
+                    FOR UPDATE
+
+                `,
+                [id],
+                (selectErr, rows) => {
+
+                    if (selectErr) {
+
+                        return db.rollback(
+                            () => {
+
+                                console.error(
+                                    selectErr
+                                );
+
+                                res.status(500).json({
+                                    message:
+                                        "Unable to read donation request."
+                                });
+
+                            }
                         );
-
-                        return res.status(500).json({
-                            message:
-                                "Unable to add approved donation."
-                        });
 
                     }
 
 
-                    /*
-                        Only remove pending row
-                        after successful donation insert.
-                    */
+                    if (
+                        !rows.length
+                    ) {
+
+                        return db.rollback(
+                            () => {
+
+                                res.status(404).json({
+                                    message:
+                                        "Donation request not found."
+                                });
+
+                            }
+                        );
+
+                    }
+
+
+                    const request =
+                        rows[0];
+
+
+                    if (
+                        request.status !==
+                        "pending"
+                    ) {
+
+                        return db.rollback(
+                            () => {
+
+                                res.status(409).json({
+                                    message:
+                                        `This request is already ${request.status}.`
+                                });
+
+                            }
+                        );
+
+                    }
+
+
+                    // ONLY EXISTING DONATION COLUMNS
 
                     db.query(
                         `
-                            DELETE FROM pending_donations
-                            WHERE id = ?
+
+                            INSERT INTO donations
+                            (
+                                full_name,
+                                phone,
+                                amount,
+                                donation_date
+                            )
+
+                            VALUES (?, ?, ?, ?)
+
                         `,
-                        [requestId],
-                        (
-                            deleteErr,
-                            deleteResult
-                        ) => {
+                        [
+                            request.full_name,
+                            request.phone,
+                            request.amount,
+                            request.transaction_date
+                        ],
+                        (insertErr) => {
 
-                            if (deleteErr) {
+                            if (insertErr) {
 
-                                console.error(
-                                    "APPROVE CLEANUP ERROR:",
-                                    deleteErr
+                                return db.rollback(
+                                    () => {
+
+                                        console.error(
+                                            insertErr
+                                        );
+
+                                        res.status(500).json({
+                                            message:
+                                                "Unable to add approved donation."
+                                        });
+
+                                    }
                                 );
-
-                                /*
-                                    Donation is already inserted.
-                                    We should report server issue.
-                                */
-
-                                return res.status(500).json({
-                                    message:
-                                        "Donation was approved, but pending request cleanup failed."
-                                });
 
                             }
 
 
-                            return res.status(200).json({
+                            db.query(
+                                `
 
-                                success: true,
+                                    UPDATE pending_donations
 
-                                message:
-                                    "Donation approved and added successfully.",
+                                    SET
+                                        status = 'accepted',
+                                        decision_at = NOW()
 
-                                donationId:
-                                    insertResult.insertId
+                                    WHERE id = ?
 
-                            });
+                                `,
+                                [id],
+                                (updateErr) => {
+
+                                    if (updateErr) {
+
+                                        return db.rollback(
+                                            () => {
+
+                                                console.error(
+                                                    updateErr
+                                                );
+
+                                                res.status(500).json({
+                                                    message:
+                                                        "Unable to complete approval."
+                                                });
+
+                                            }
+                                        );
+
+                                    }
+
+
+                                    db.commit(
+                                        (commitErr) => {
+
+                                            if (commitErr) {
+
+                                                return db.rollback(
+                                                    () => {
+
+                                                        res.status(500).json({
+                                                            message:
+                                                                "Unable to complete approval."
+                                                        });
+
+                                                    }
+                                                );
+
+                                            }
+
+
+                                            return res.json({
+
+                                                success: true,
+
+                                                message:
+                                                    "Donation request accepted."
+
+                                            });
+
+                                        }
+                                    );
+
+                                }
+                            );
 
                         }
                     );
@@ -755,7 +894,7 @@ const approveDonationRequest = (
 
 
 // ======================================================
-// REJECT GUEST DONATION
+// REJECT REQUEST
 // ======================================================
 
 const rejectDonationRequest = (
@@ -763,13 +902,13 @@ const rejectDonationRequest = (
     res
 ) => {
 
-    const requestId =
+    const id =
         Number(req.params.id);
 
 
     if (
-        !Number.isInteger(requestId) ||
-        requestId <= 0
+        !Number.isInteger(id) ||
+        id <= 0
     ) {
 
         return res.status(400).json({
@@ -782,22 +921,31 @@ const rejectDonationRequest = (
 
     db.query(
         `
-            DELETE FROM pending_donations
-            WHERE id = ?
+
+            UPDATE pending_donations
+
+            SET
+                status = 'rejected',
+                decision_at = NOW()
+
+            WHERE
+                id = ?
+                AND status = 'pending'
+
         `,
-        [requestId],
+        [id],
         (err, result) => {
 
             if (err) {
 
                 console.error(
-                    "REJECT DONATION ERROR:",
+                    "REJECT REQUEST ERROR:",
                     err
                 );
 
                 return res.status(500).json({
                     message:
-                        "Unable to reject donation request."
+                        "Unable to reject request."
                 });
 
             }
@@ -807,15 +955,15 @@ const rejectDonationRequest = (
                 result.affectedRows === 0
             ) {
 
-                return res.status(404).json({
+                return res.status(409).json({
                     message:
-                        "Donation request not found."
+                        "Request was not found or has already been processed."
                 });
 
             }
 
 
-            return res.status(200).json({
+            return res.json({
 
                 success: true,
 
@@ -842,10 +990,11 @@ module.exports = {
 
     submitDonationRequest,
 
-    getPendingDonationRequests,
+    getDonationRequests,
+
+    getPendingRequestCount,
 
     approveDonationRequest,
 
     rejectDonationRequest
-
 };
