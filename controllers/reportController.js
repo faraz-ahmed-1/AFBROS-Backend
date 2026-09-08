@@ -36,7 +36,7 @@ const queryAsync = (
 
 
 // ======================================================
-// VALID DATE FORMAT
+// VALID DATE
 // ======================================================
 
 const isValidDateString = (
@@ -50,6 +50,7 @@ const isValidDateString = (
     ) {
 
         return false;
+
     }
 
 
@@ -82,7 +83,7 @@ const isValidDateString = (
 
 
 // ======================================================
-// GET PDF STATEMENT DATA
+// GET STATEMENT
 // ======================================================
 
 const getStatement = async (
@@ -92,7 +93,7 @@ const getStatement = async (
 
     try {
 
-        const type =
+        const requestedType =
             req.query.type ||
             "all";
 
@@ -122,34 +123,36 @@ const getStatement = async (
                 "all",
                 "in",
                 "out"
-            ].includes(type)
+            ].includes(
+                requestedType
+            )
         ) {
 
-            return res
-                .status(400)
-                .json({
-                    message:
-                        "Invalid statement type."
-                });
+            return res.status(400).json({
+                message:
+                    "Invalid statement type."
+            });
 
         }
 
 
         // ==================================================
-        // EXPENSE STATEMENT DOES NOT USE DONOR
+        // EXPENSE STATEMENT NEVER USES DONOR
         // ==================================================
 
         if (
-            type === "out"
+            requestedType ===
+            "out"
         ) {
 
-            donor = "";
+            donor =
+                "";
 
         }
 
 
         // ==================================================
-        // VALIDATE DATE RANGE
+        // DATE VALIDATION
         // ==================================================
 
         const hasFrom =
@@ -161,15 +164,14 @@ const getStatement = async (
 
 
         if (
-            hasFrom !== hasTo
+            hasFrom !==
+            hasTo
         ) {
 
-            return res
-                .status(400)
-                .json({
-                    message:
-                        "Both From and To dates are required."
-                });
+            return res.status(400).json({
+                message:
+                    "Both From and To dates are required."
+            });
 
         }
 
@@ -177,17 +179,19 @@ const getStatement = async (
         if (
             hasFrom &&
             (
-                !isValidDateString(from) ||
-                !isValidDateString(to)
+                !isValidDateString(
+                    from
+                ) ||
+                !isValidDateString(
+                    to
+                )
             )
         ) {
 
-            return res
-                .status(400)
-                .json({
-                    message:
-                        "Invalid statement date."
-                });
+            return res.status(400).json({
+                message:
+                    "Invalid statement date."
+            });
 
         }
 
@@ -197,24 +201,16 @@ const getStatement = async (
             from > to
         ) {
 
-            return res
-                .status(400)
-                .json({
-                    message:
-                        "From date cannot be after To date."
-                });
+            return res.status(400).json({
+                message:
+                    "From date cannot be after To date."
+            });
 
         }
 
 
         // ==================================================
-        // VALIDATE DONOR NAME
-        // ==================================================
-        //
-        // Donor name is optional.
-        //
-        // But if entered:
-        // it MUST match an existing donor name.
+        // VALIDATE DONOR
         // ==================================================
 
         let canonicalDonorName =
@@ -224,45 +220,43 @@ const getStatement = async (
         if (
             donor &&
             (
-                type === "all" ||
-                type === "in"
+                requestedType === "all" ||
+                requestedType === "in"
             )
         ) {
 
-            const donorCheckSql = `
-
-                SELECT DISTINCT
-                    full_name
-
-                FROM donations
-
-                WHERE
-                    LOWER(
-                        TRIM(full_name)
-                    ) = LOWER(?)
-
-                LIMIT 1
-
-            `;
-
-
             const donorRows =
                 await queryAsync(
-                    donorCheckSql,
-                    [donor]
+                    `
+
+                        SELECT DISTINCT
+                            full_name
+
+                        FROM donations
+
+                        WHERE
+                            LOWER(
+                                TRIM(full_name)
+                            ) = LOWER(?)
+
+                        LIMIT 1
+
+                    `,
+                    [
+                        donor
+                    ]
                 );
 
 
             if (
-                donorRows.length === 0
+                donorRows.length ===
+                0
             ) {
 
-                return res
-                    .status(400)
-                    .json({
-                        message:
-                            "Donor name was not found in donation records. Please select a valid donor from the suggestions."
-                    });
+                return res.status(400).json({
+                    message:
+                        "Donor name was not found. Please select a valid donor from the suggestions."
+                });
 
             }
 
@@ -275,7 +269,34 @@ const getStatement = async (
 
 
         // ==================================================
-        // DONATION CONDITIONS
+        // IMPORTANT:
+        //
+        // Dashboard normally = Complete Statement
+        //
+        // But when a donor is selected on Dashboard,
+        // generate that donor's Donation Statement only.
+        //
+        // This prevents unrelated expenses from appearing.
+        // ==================================================
+
+        let statementType =
+            requestedType;
+
+
+        if (
+            requestedType ===
+                "all" &&
+            canonicalDonorName
+        ) {
+
+            statementType =
+                "in";
+
+        }
+
+
+        // ==================================================
+        // DONATION WHERE
         // ==================================================
 
         let donationWhere =
@@ -296,13 +317,14 @@ const getStatement = async (
             hasTo
         ) {
 
-            donationWhere = `
+            donationWhere =
+                `
 
-                WHERE
-                    donation_date
-                    BETWEEN ? AND ?
+                    WHERE
+                        donation_date
+                        BETWEEN ? AND ?
 
-            `;
+                `;
 
 
             donationParams = [
@@ -313,26 +335,19 @@ const getStatement = async (
         }
 
 
-        // ==================================================
-        // EXACT DONOR FILTER
-        // ==================================================
-
         if (
-            canonicalDonorName &&
-            (
-                type === "all" ||
-                type === "in"
-            )
+            canonicalDonorName
         ) {
 
-            donationWhere += `
+            donationWhere +=
+                `
 
-                AND
-                    LOWER(
-                        TRIM(full_name)
-                    ) = LOWER(?)
+                    AND
+                        LOWER(
+                            TRIM(full_name)
+                        ) = LOWER(?)
 
-            `;
+                `;
 
 
             donationParams.push(
@@ -343,7 +358,7 @@ const getStatement = async (
 
 
         // ==================================================
-        // EXPENSE CONDITIONS
+        // EXPENSE WHERE
         // ==================================================
 
         let expenseWhere =
@@ -364,13 +379,14 @@ const getStatement = async (
             hasTo
         ) {
 
-            expenseWhere = `
+            expenseWhere =
+                `
 
-                WHERE
-                    expense_date
-                    BETWEEN ? AND ?
+                    WHERE
+                        expense_date
+                        BETWEEN ? AND ?
 
-            `;
+                `;
 
 
             expenseParams = [
@@ -382,75 +398,77 @@ const getStatement = async (
 
 
         // ==================================================
-        // DONATION QUERY
+        // DONATIONS SQL
         // ==================================================
 
-        const donationSql = `
+        const donationSql =
+            `
 
-            SELECT
+                SELECT
 
-                id,
+                    id,
 
-                DATE_FORMAT(
-                    donation_date,
-                    '%Y-%m-%d'
-                ) AS record_date,
+                    DATE_FORMAT(
+                        donation_date,
+                        '%Y-%m-%d'
+                    ) AS record_date,
 
-                'IN'
-                    AS transaction_type,
+                    'IN'
+                        AS transaction_type,
 
-                full_name,
+                    full_name,
 
-                phone
-                    AS details,
+                    phone
+                        AS details,
 
-                amount
+                    amount
 
-            FROM donations
+                FROM donations
 
-            ${donationWhere}
+                ${donationWhere}
 
-            ORDER BY
-                donation_date ASC,
-                id ASC
+                ORDER BY
+                    donation_date ASC,
+                    id ASC
 
-        `;
+            `;
 
 
         // ==================================================
-        // EXPENSE QUERY
+        // EXPENSE SQL
         // ==================================================
 
-        const expenseSql = `
+        const expenseSql =
+            `
 
-            SELECT
+                SELECT
 
-                id,
+                    id,
 
-                DATE_FORMAT(
-                    expense_date,
-                    '%Y-%m-%d'
-                ) AS record_date,
+                    DATE_FORMAT(
+                        expense_date,
+                        '%Y-%m-%d'
+                    ) AS record_date,
 
-                'OUT'
-                    AS transaction_type,
+                    'OUT'
+                        AS transaction_type,
 
-                full_name,
+                    full_name,
 
-                description
-                    AS details,
+                    description
+                        AS details,
 
-                amount
+                    amount
 
-            FROM expenses
+                FROM expenses
 
-            ${expenseWhere}
+                ${expenseWhere}
 
-            ORDER BY
-                expense_date ASC,
-                id ASC
+                ORDER BY
+                    expense_date ASC,
+                    id ASC
 
-        `;
+            `;
 
 
         // ==================================================
@@ -466,8 +484,8 @@ const getStatement = async (
 
 
         if (
-            type === "all" ||
-            type === "in"
+            statementType === "all" ||
+            statementType === "in"
         ) {
 
             donations =
@@ -480,8 +498,8 @@ const getStatement = async (
 
 
         if (
-            type === "all" ||
-            type === "out"
+            statementType === "all" ||
+            statementType === "out"
         ) {
 
             expenses =
@@ -503,10 +521,6 @@ const getStatement = async (
         ];
 
 
-        // ==================================================
-        // SORT BY DATE
-        // ==================================================
-
         records.sort(
             (a, b) => {
 
@@ -521,7 +535,8 @@ const getStatement = async (
 
 
                 if (
-                    dateCompare !== 0
+                    dateCompare !==
+                    0
                 ) {
 
                     return dateCompare;
@@ -543,8 +558,7 @@ const getStatement = async (
 
 
                 return (
-                    a.transaction_type ===
-                    "IN"
+                    a.transaction_type === "IN"
                         ? -1
                         : 1
                 );
@@ -554,54 +568,36 @@ const getStatement = async (
 
 
         // ==================================================
-        // TOTAL CREDIT
+        // TOTALS
         // ==================================================
 
         const totalIn =
             donations.reduce(
                 (
-                    sum,
-                    donation
-                ) => {
-
-                    return (
-                        sum +
-                        Number(
-                            donation.amount
-                        )
-                    );
-
-                },
+                    total,
+                    row
+                ) =>
+                    total +
+                    Number(
+                        row.amount
+                    ),
                 0
             );
 
-
-        // ==================================================
-        // TOTAL DEBIT
-        // ==================================================
 
         const totalOut =
             expenses.reduce(
                 (
-                    sum,
-                    expense
-                ) => {
-
-                    return (
-                        sum +
-                        Number(
-                            expense.amount
-                        )
-                    );
-
-                },
+                    total,
+                    row
+                ) =>
+                    total +
+                    Number(
+                        row.amount
+                    ),
                 0
             );
 
-
-        // ==================================================
-        // BALANCE
-        // ==================================================
 
         const balance =
             totalIn -
@@ -612,59 +608,68 @@ const getStatement = async (
         // RESPONSE
         // ==================================================
 
-        return res
-            .status(200)
-            .json({
+        return res.status(200).json({
 
-                success:
-                    true,
+            success:
+                true,
 
 
-                type,
+            /*
+                This is the actual PDF type.
+
+                Dashboard + donor:
+                becomes "in".
+            */
+
+            type:
+                statementType,
 
 
-                filters: {
-
-                    donor:
-                        canonicalDonorName ||
-                        null
-
-                },
+            requestedType,
 
 
-                range: {
+            filters: {
 
-                    from:
-                        hasFrom
-                            ? from
-                            : null,
+                donor:
+                    canonicalDonorName ||
+                    null
 
-                    to:
-                        hasTo
-                            ? to
-                            : null,
-
-                    complete:
-                        !hasFrom &&
-                        !hasTo
-
-                },
+            },
 
 
-                totals: {
+            range: {
 
-                    totalIn,
+                from:
+                    hasFrom
+                        ? from
+                        : null,
 
-                    totalOut,
+                to:
+                    hasTo
+                        ? to
+                        : null,
 
-                    balance
+                complete:
+                    !hasFrom &&
+                    !hasTo
 
-                },
+            },
 
 
-                records
+            totals: {
 
-            });
+                totalIn,
+
+                totalOut,
+
+                balance
+
+            },
+
+
+            records
+
+        });
 
 
     } catch (err) {
@@ -675,12 +680,10 @@ const getStatement = async (
         );
 
 
-        return res
-            .status(500)
-            .json({
-                message:
-                    "Unable to generate financial statement."
-            });
+        return res.status(500).json({
+            message:
+                "Unable to generate financial statement."
+        });
 
     }
 
