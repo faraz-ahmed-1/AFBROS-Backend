@@ -7,7 +7,7 @@ const db =
 const {
     sendDonorUpdateOtp
 } = require(
-    "../services/resendService"
+    "../utils/sendEmail"
 );
 
 
