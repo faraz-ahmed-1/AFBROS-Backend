@@ -1,6 +1,19 @@
 const db =
     require("../config/db");
 
+const {
+
+    sendDonationRequestSubmittedEmail,
+
+    sendManagerDonationRequestEmail,
+
+    sendDonationApprovedEmail,
+
+    sendDonationRejectedEmail
+
+} = require(
+    "../utils/sendEmail"
+);
 
 // ======================================================
 // HELPERS
@@ -166,12 +179,11 @@ const validEmail = (
 
 
 // ======================================================
-// ADD DONATION
-// FINANCE MANAGER
+// ADD DONATION - FINANCE MANAGER
 // ======================================================
 
 const addDonation =
-    (
+    async (
         req,
         res
     ) => {
@@ -180,15 +192,38 @@ const addDonation =
 
             fullName,
             phone,
+            email,
             amount,
             date
 
         } = req.body;
 
 
+        const normalizedName =
+            fullName?.trim() ||
+            "";
+
+
+        const normalizedPhone =
+            phone?.trim() ||
+            "";
+
+
+        const normalizedEmail =
+            email
+                ?.trim()
+                .toLowerCase() ||
+            "";
+
+
+        // ==================================================
+        // VALIDATION
+        // ==================================================
+
         if (
-            !fullName?.trim() ||
-            !phone?.trim() ||
+            !normalizedName ||
+            !normalizedPhone ||
+            !normalizedEmail ||
             !amount ||
             !date
         ) {
@@ -198,6 +233,22 @@ const addDonation =
                 .json({
                     message:
                         "Please fill in all donation fields."
+                });
+
+        }
+
+
+        if (
+            !validEmail(
+                normalizedEmail
+            )
+        ) {
+
+            return res
+                .status(400)
+                .json({
+                    message:
+                        "Please enter a valid donor email address."
                 });
 
         }
@@ -219,71 +270,306 @@ const addDonation =
         }
 
 
-        db.query(
-            `
+        let transactionStarted =
+            false;
 
-                INSERT INTO donations
-                (
-                    full_name,
-                    phone,
-                    amount,
-                    donation_date
-                )
 
-                VALUES (?, ?, ?, ?)
+        try {
 
-            `,
-            [
+            await beginTransactionAsync();
 
-                fullName.trim(),
+            transactionStarted =
+                true;
 
-                phone.trim(),
 
-                Number(amount),
+            // ==================================================
+            // CHECK EXISTING DONOR PROFILE
+            // ==================================================
 
-                date
+            const profiles =
+                await queryAsync(
+                    `
 
-            ],
-            (
-                err,
-                result
-            ) => {
+                        SELECT
 
-                if (err) {
+                            id,
+                            full_name,
+                            phone,
+                            email
 
-                    console.error(
-                        "ADD DONATION ERROR:",
-                        err
-                    );
+                        FROM donor_profiles
+
+                        WHERE
+                            phone = ?
+                            OR LOWER(email) = LOWER(?)
+
+                        LIMIT 1
+
+                    `,
+                    [
+                        normalizedPhone,
+                        normalizedEmail
+                    ]
+                );
+
+
+            let donationName =
+                normalizedName;
+
+
+            let donationPhone =
+                normalizedPhone;
+
+
+            let donorEmail =
+                normalizedEmail;
+
+
+            // ==================================================
+            // EXISTING DONOR
+            // ==================================================
+
+            if (
+                profiles.length >
+                0
+            ) {
+
+                const profile =
+                    profiles[0];
+
+
+                // ==================================================
+                // IMPORTANT:
+                //
+                // Do not silently change donor details.
+                // Those changes still require OTP.
+                // ==================================================
+
+                if (
+                    profile.phone !==
+                        normalizedPhone ||
+                    profile.email
+                        .trim()
+                        .toLowerCase() !==
+                        normalizedEmail
+                ) {
+
+                    await rollbackAsync();
+
+                    transactionStarted =
+                        false;
 
 
                     return res
-                        .status(500)
+                        .status(409)
                         .json({
                             message:
-                                "Unable to add donation."
+                                "This donor already has registered contact details. Please use the registered phone/email or use the donor detail change OTP feature."
                         });
 
                 }
 
 
+                donationName =
+                    profile.full_name;
+
+
+                donationPhone =
+                    profile.phone;
+
+
+                donorEmail =
+                    profile.email;
+
+            } else {
+
+                // ==================================================
+                // NEW DONOR PROFILE
+                // ==================================================
+
+                await queryAsync(
+                    `
+
+                        INSERT INTO donor_profiles
+                        (
+                            full_name,
+                            phone,
+                            email
+                        )
+
+                        VALUES (?, ?, ?)
+
+                    `,
+                    [
+
+                        normalizedName,
+
+                        normalizedPhone,
+
+                        normalizedEmail
+
+                    ]
+                );
+
+            }
+
+
+            // ==================================================
+            // INSERT DONATION
+            //
+            // NO EMAIL COLUMN IS ADDED TO donations.
+            // ==================================================
+
+            const donationResult =
+                await queryAsync(
+                    `
+
+                        INSERT INTO donations
+                        (
+                            full_name,
+                            phone,
+                            amount,
+                            donation_date
+                        )
+
+                        VALUES (?, ?, ?, ?)
+
+                    `,
+                    [
+
+                        donationName,
+
+                        donationPhone,
+
+                        Number(
+                            amount
+                        ),
+
+                        date
+
+                    ]
+                );
+
+
+            await commitAsync();
+
+            transactionStarted =
+                false;
+
+
+            // ==================================================
+            // SEND THANK-YOU / APPROVED EMAIL
+            //
+            // Email failure must NOT undo donation.
+            // ==================================================
+
+            try {
+
+                await sendDonationApprovedEmail({
+
+                    full_name:
+                        donationName,
+
+                    phone:
+                        donationPhone,
+
+                    email:
+                        donorEmail,
+
+                    amount:
+                        Number(
+                            amount
+                        ),
+
+                    transaction_date:
+                        date
+
+                });
+
+
+            } catch (
+                emailError
+            ) {
+
+                console.error(
+                    "MANUAL DONATION EMAIL FAILED:",
+                    emailError
+                );
+
+            }
+
+
+            return res
+                .status(201)
+                .json({
+
+                    success:
+                        true,
+
+                    message:
+                        "Donation added successfully.",
+
+                    id:
+                        donationResult.insertId
+
+                });
+
+
+        } catch (
+            err
+        ) {
+
+            if (
+                transactionStarted
+            ) {
+
+                try {
+
+                    await rollbackAsync();
+
+                } catch (
+                    rollbackError
+                ) {
+
+                    console.error(
+                        "ADD DONATION ROLLBACK ERROR:",
+                        rollbackError
+                    );
+
+                }
+
+            }
+
+
+            console.error(
+                "ADD DONATION ERROR:",
+                err
+            );
+
+
+            if (
+                err.code ===
+                "ER_DUP_ENTRY"
+            ) {
+
                 return res
-                    .status(201)
+                    .status(409)
                     .json({
-
-                        success:
-                            true,
-
                         message:
-                            "Donation added successfully.",
-
-                        id:
-                            result.insertId
-
+                            "This email or phone number is already registered to another donor."
                     });
 
             }
-        );
+
+
+            return res
+                .status(500)
+                .json({
+                    message:
+                        "Unable to add donation."
+                });
+
+        }
 
     };
 
@@ -747,6 +1033,29 @@ const submitDonationRequest =
             }
 
 
+            const requestData = {
+
+                full_name:
+                    fullName.trim(),
+
+                phone:
+                    phone.trim(),
+
+                email:
+                    normalizedEmail,
+
+                account_title:
+                    accountTitle.trim(),
+
+                amount:
+                    Number(amount),
+
+                transaction_date:
+                    transactionDate
+
+            };
+
+
             const result =
                 await queryAsync(
                     `
@@ -776,20 +1085,65 @@ const submitDonationRequest =
                     `,
                     [
 
-                        fullName.trim(),
+                        requestData.full_name,
 
-                        phone.trim(),
+                        requestData.phone,
 
-                        normalizedEmail,
+                        requestData.email,
 
-                        accountTitle.trim(),
+                        requestData.account_title,
 
-                        Number(amount),
+                        requestData.amount,
 
-                        transactionDate
+                        requestData.transaction_date
 
                     ]
                 );
+
+
+            // ==================================================
+            // EMAILS
+            //
+            // Email failure should NOT delete the request.
+            // ==================================================
+
+            const emailResults =
+                await Promise.allSettled([
+
+                    sendDonationRequestSubmittedEmail(
+                        requestData
+                    ),
+
+                    sendManagerDonationRequestEmail(
+                        requestData
+                    )
+
+                ]);
+
+
+            emailResults.forEach(
+                (
+                    result,
+                    index
+                ) => {
+
+                    if (
+                        result.status ===
+                        "rejected"
+                    ) {
+
+                        console.error(
+                            index === 0
+                                ? "DONOR SUBMISSION EMAIL FAILED:"
+                                : "MANAGER REQUEST EMAIL FAILED:",
+
+                            result.reason
+                        );
+
+                    }
+
+                }
+            );
 
 
             return res
@@ -800,7 +1154,7 @@ const submitDonationRequest =
                         true,
 
                     message:
-                        "Donation request submitted for verification.",
+                        "Donation request submitted successfully. You will be notified after verification.",
 
                     id:
                         result.insertId
@@ -1244,9 +1598,33 @@ const approveDonationRequest =
 
             await commitAsync();
 
+            
             transactionStarted =
                 false;
 
+            try {
+
+    if (
+        request.email
+    ) {
+
+        await sendDonationApprovedEmail(
+            request
+        );
+
+    }
+
+
+} catch (
+    emailError
+) {
+
+    console.error(
+        "DONATION APPROVAL EMAIL FAILED:",
+        emailError
+    );
+
+}
 
             return res.json({
 
@@ -1351,6 +1729,81 @@ const rejectDonationRequest =
 
         try {
 
+            // ==================================================
+            // LOAD REQUEST FIRST
+            // ==================================================
+
+            const requests =
+                await queryAsync(
+                    `
+
+                        SELECT
+
+                            id,
+                            full_name,
+                            phone,
+                            email,
+                            account_title,
+                            amount,
+
+                            DATE_FORMAT(
+                                transaction_date,
+                                '%Y-%m-%d'
+                            ) AS transaction_date,
+
+                            status
+
+                        FROM pending_donations
+
+                        WHERE id = ?
+
+                        LIMIT 1
+
+                    `,
+                    [
+                        id
+                    ]
+                );
+
+
+            if (
+                requests.length ===
+                0
+            ) {
+
+                return res
+                    .status(404)
+                    .json({
+                        message:
+                            "Donation request not found."
+                    });
+
+            }
+
+
+            const request =
+                requests[0];
+
+
+            if (
+                request.status !==
+                "pending"
+            ) {
+
+                return res
+                    .status(409)
+                    .json({
+                        message:
+                            `This donation request is already ${request.status}.`
+                    });
+
+            }
+
+
+            // ==================================================
+            // REJECT
+            // ==================================================
+
             const result =
                 await queryAsync(
                     `
@@ -1381,8 +1834,36 @@ const rejectDonationRequest =
                     .status(409)
                     .json({
                         message:
-                            "Request was not found or has already been processed."
+                            "Request has already been processed."
                     });
+
+            }
+
+
+            // ==================================================
+            // SEND REJECTION EMAIL
+            // ==================================================
+
+            try {
+
+                if (
+                    request.email
+                ) {
+
+                    await sendDonationRejectedEmail(
+                        request
+                    );
+
+                }
+
+            } catch (
+                emailError
+            ) {
+
+                console.error(
+                    "DONATION REJECTION EMAIL FAILED:",
+                    emailError
+                );
 
             }
 
@@ -1412,7 +1893,7 @@ const rejectDonationRequest =
                 .status(500)
                 .json({
                     message:
-                        "Unable to reject request."
+                        "Unable to reject donation request."
                 });
 
         }
