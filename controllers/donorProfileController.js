@@ -4,11 +4,10 @@ const crypto =
 const db =
     require("../config/db");
 
-const {
-    sendDonorUpdateOtp
-} = require(
-    "../utils/sendEmail"
-);
+const sendOTPEmail =
+    require(
+        "../utils/sendEmail"
+    );
 
 
 // ======================================================
@@ -697,7 +696,7 @@ const requestUpdateOtp =
 
             try {
 
-                await sendDonorUpdateOtp(
+                await sendOTPEmail(
                     donor.email,
                     otp
                 );
